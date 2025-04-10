@@ -11,6 +11,9 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 
 def _get_model(model_name : str = None):
+    if model_name is None : model_name = "gemini-2.0-flash"
+
+
 
     if "gemini" in model_name: 
         model = ChatGoogleGenerativeAI(
@@ -22,11 +25,9 @@ def _get_model(model_name : str = None):
     else : 
         model = ChatGoogleGenerativeAI(
             temperature=0.0,
-            model_name="gemini-2.5-pro-preview-03-25",
+            model_name="gemini-2.0-flash",
             api_key=GEMINI_API_KEY,
         )
-
-
     return model
 
 
