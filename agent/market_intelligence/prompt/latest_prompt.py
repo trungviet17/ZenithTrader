@@ -1,19 +1,24 @@
-from langchain.prompts import PromptTemplate
-from market_intelligence.prompt.general_prompt import system_prompt, task_description, market_intelligence_effect_prompt
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 
+
+from langchain.prompts import PromptTemplate
+from agent.market_intelligence.prompt.general_prompt import system_prompt, task_description, market_intelligence_effect_prompt
+from server.schema import AssetData
 
 
 latest_outputformat = """
-    Please ONLY return a valid JSON object. You MUST FOLLOW the JSON output format as follows:
-    {
+    Please ONLY return a valid JSON object. You MUST FOLLOW the JSON output format as follows:  
+    {{
         "analysis": "ID: 000001 - Analysis that you provided for market intelligence 000001. ID: 000002 - Analysis that you provided for market intelligence 000002...",
         "summary": "The summary that you provided.",
-        "query": {
+        "query": {{
             "short_term_query": "Query text that you provided for SHORT-TERM.",
             "medium_term_query": "Query text that you provided for MEDIUM-TERM.",
             "long_term_query": "Query text that you provided for LONG-TERM."
-        }
-    }
+        }}
+    }}
 """
 
 
@@ -64,38 +69,117 @@ latest_prompt_summary = """
 """
 
 
-latest_prompt_template = f"""
-    {system_prompt}
-
-    {task_description}
-
-    The following market intelligence (e.g., news, financial reports) contains latest (i.e., today)
-information related to {{asset_symbol}}, including the corresponding dates, headlines, and contents, with each item
-distinguished by a unique ID. Furthermore, if the day is not closed for trading, the section also provides the open, high,
-low, close, and adjusted close prices.
-    Latest market intelligence and prices are as follows: 
-    {{latest_market_intelligence}}
-
-    {market_intelligence_effect_prompt}
-
-
-    {latest_prompt_summary}
-
-
-    {latest_outputformat}
-
-"""
-
-
-def create_latest_prompt_template() -> PromptTemplate:
 
 
 
+def create_latest_prompt_template(asset_data : AssetData) -> PromptTemplate:
+    
+    new_task_description = task_description.format(
+        asset_type=asset_data.asset_type,
+        asset_name=asset_data.asset_name,
+        asset_symbol=asset_data.asset_symbol,
+        asset_exchange=asset_data.asset_exchange,
+        asset_sector=asset_data.asset_sector,
+        asset_industry=asset_data.asset_industry,
+        asset_description=asset_data.asset_description
+    )
+
+    
+
+    new_latest_prompt_summary = latest_prompt_summary.format(
+        asset_name=asset_data.asset_name,
+        asset_symbol=asset_data.asset_symbol
+    )
+
+
+
+    latest_prompt_template = f"""
+        {system_prompt}
+
+        {new_task_description}
+
+        The following market intelligence (e.g., news, financial reports) contains latest (i.e., today)
+    information related to {{asset_symbol}}, including the corresponding dates, headlines, and contents, with each item
+    distinguished by a unique ID. Furthermore, if the day is not closed for trading, the section also provides the open, high,
+    low, close, and adjusted close prices.
+        Latest market intelligence and prices are as follows: 
+        {{latest_market_intelligence}}
+
+        {market_intelligence_effect_prompt}
+
+
+        {new_latest_prompt_summary}
+
+
+        {latest_outputformat}
+
+    """
 
 
     return PromptTemplate(
         input_variables=["asset_name", "asset_symbol", "latest_market_intelligence"],
         template=latest_prompt_template,
     )
+
+
+if __name__ == '__main__': 
+
+
+    def test_latest_prompt_template():
+        # Create sample asset data
+        sample_asset = AssetData(
+            asset_type="stock",
+            asset_name="Apple Inc.",
+            asset_symbol="AAPL",
+            asset_exchange="NASDAQ",
+            asset_sector="Technology",
+            asset_industry="Consumer Electronics",
+            asset_description="Apple Inc. designs, manufactures, and markets smartphones, personal computers, tablets, wearables, and accessories worldwide."
+        )
+        
+        # Create the prompt template
+        prompt_template = create_latest_prompt_template(sample_asset)
+        
+        # Sample market intelligence data for testing
+        sample_intelligence = """
+        ID: 000001
+        Date: 2025-04-12
+        Headline: Apple announces new iPhone model
+        Content: Apple Inc. revealed their latest iPhone model with groundbreaking AI features today, expected to boost sales in Q3.
+        
+        ID: 000002
+        Date: 2025-04-12
+        Headline: Supply chain issues resolved
+        Content: Apple confirmed that recent supply chain constraints have been resolved, allowing for improved production capacity.
+        
+        Price Data:
+        Open: 198.45
+        High: 203.78
+        Low: 197.90
+        Close: 202.56
+        Volume: 73,452,890
+        """
+        
+        # Format the prompt with sample data
+        formatted_prompt = prompt_template.format(
+            asset_name=sample_asset.asset_name,
+            asset_symbol=sample_asset.asset_symbol, 
+            latest_market_intelligence=sample_intelligence
+        )
+        
+        # Print the formatted prompt to verify
+        print("=== FORMATTED PROMPT ===")
+        print(formatted_prompt)
+        print("=== END OF FORMATTED PROMPT ===")
+        
+        # Simple assertion to ensure the prompt contains key elements
+        assert sample_asset.asset_name in formatted_prompt
+        assert sample_asset.asset_symbol in formatted_prompt
+        assert "ID: 000001" in formatted_prompt
+        assert "groundbreaking AI features" in formatted_prompt
+        
+        print("All tests passed successfully!")
+
+    test_latest_prompt_template()
 
 
