@@ -1,0 +1,60 @@
+[project]
+name = "zenithtrader"
+version = "0.0.1"
+description = "Starter template for making a custom Reasoning and Action agent (using tool calling) in LangGraph."
+authors = [
+    { name = "William Fu-Hinthorn", email = "13333726+hinthornw@users.noreply.github.com" },
+]
+readme = "README.md"
+requires-python = ">=3.11,<4.0"
+
+[project.optional-dependencies]
+dev = ["mypy>=1.11.1", "ruff>=0.6.1"]
+
+[build-system]
+requires = ["setuptools>=73.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["src.templates.market", "market", "memory", "tool", "llm", "prompts", "database"]
+[tool.setuptools.package-dir]
+"src.templates.market" = "src/modules/market"
+"market" = "src/modules/market"
+"memory" = "src/modules/memory"
+"tool" = "src/modules/tool"
+"llm" = "src/modules/llm"
+"prompts" = "src/modules/prompts"
+"database" = "src/database"
+
+
+[tool.setuptools.package-data]
+"*" = ["py.typed"]
+
+[tool.ruff]
+lint.select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    "I",    # isort
+    "D",    # pydocstyle
+    "D401", # First line should be in imperative mood
+    "T201",
+    "UP",
+]
+lint.ignore = [
+    "UP006",
+    "UP007",
+    # We actually do want to import from typing_extensions
+    "UP035",
+    # Relax the convention by _not_ requiring documentation for every function parameter.
+    "D417",
+    "E501",
+]
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D", "UP"]
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[dependency-groups]
+dev = [
+    "langgraph-cli[inmem]>=0.1.71",
+]

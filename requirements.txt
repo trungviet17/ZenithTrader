@@ -1,0 +1,6 @@
+fastapi
+langgraph
+faiss-cpu
+yfinance
+langchain-google-genai
+sortedcontainers
