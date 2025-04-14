@@ -36,7 +36,7 @@ class MarketSearchingTools:
         self.alpha_avantage_api_key = alpha_avantage_api_key
 
 
-    def web_search_tool(self, query : str) -> str:
+    def web_search_tool(self, query : str) -> List:
         """
         This tool performs a web search and returns the results.
         Args:
@@ -50,17 +50,17 @@ class MarketSearchingTools:
         )
         results = tavily_search.invoke(query)
 
-        formatted_information = "Search results: \n\n"
+        formatted_information = []
         for i, result in enumerate(results):
-            formatted_information += f"Result {i+1}:\n"
-            formatted_information += f"Title: {result['title']}\n"
-            formatted_information += f"Description: {result['content']}\n\n"
-
+            content  = f"Result {i+1}:\n"
+            content += f"Title: {result['title']}\n"
+            content += f"Description: {result['content']}\n\n"
+            formatted_information.append(content)
 
         return formatted_information
 
     
-    def news_api_tool(self, data: AssetData) -> str:
+    def news_api_tool(self, data: AssetData) -> List:
         """
         This tool performs a news API search and returns the results.
         Args:
@@ -70,26 +70,25 @@ class MarketSearchingTools:
         """
 
         client = NewsApiClient( api_key  = self.news_api_key)
-        one_hour_ago = datetime.now() - timedelta(hours=1)
+        one_hour_ago = datetime.now() - timedelta(hours=24)
         
         all_articles = client.get_everything(
-            q = data.asset_name,
-            from_param = one_hour_ago.strftime("%Y-%m-%dT%H:%M:%S"),
-            to = datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            q = data.asset_name, 
             language = "en",
             sort_by = "relevancy",
             page_size = 5,
         )
 
-        formatted_information = "News results: \n\n"
-
+        
+        information_list = []
         for i, article in enumerate(all_articles["articles"]):
-            formatted_information += f"Article {i+1}:\n"
-            formatted_information += f"Title: {article['title']}\n"
-            formatted_information += f"Description: {article['description']}\n\n"
+            content = f"Article {i+1}:\n"
+            content += f"Title: {article['title']}\n"
+            content += f"Description: {article['description']}\n\n"
 
+            information_list.append(content)
 
-        return formatted_information
+        return  information_list
 
     def financial_report_tool(self, ticker: str) -> str:
         """
@@ -183,35 +182,36 @@ class MarketSearchingTools:
         return formatted_information
 
 
-    def sentiment_analysis_tool(self, ticker: str, limit : int = 10) -> str:
+    def sentiment_analysis_tool(self, ticker: str, limit : int = 10, hour_ago: int = 16) -> List:
         """
         Performs sentiment analysis on recent news articles related to a specified ticker symbol.
         Args:
             ticker: The stock ticker symbol to analyze (e.g., 'AAPL', 'MSFT')
             limit: Maximum number of articles to retrieve. Defaults to 10.
+            hour_ago: Number of hours to look back for news articles. Defaults to 16 hour.
         Returns:
             Formatted string containing sentiment analysis results
         """
         now = datetime.now()
-        one_hour_ago = now - timedelta(hours=1)
+        one_hour_ago = now - timedelta(hours=hour_ago)
         time_from = one_hour_ago.strftime("%Y%m%dT%H%M")
 
 
         url = "https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers=" +  ticker + "&apikey=" + self.alpha_avantage_api_key + "&limit=" + str(limit) + "&time_from=" + str(time_from) + "&sort=LATEST"
-
+        print(url) 
         response = requests.get(url)
         if response.status_code != 200: 
             raise Exception(f"API fetch error. Status: {response.status_code}")
 
         data = response.json()
-        formatted_information = f"""
+        formatted_information = [f"""
 
         Sentiment Analysis for {ticker} from {one_hour_ago.strftime("%Y-%m-%d %H:%M")} to {now.strftime("%Y-%m-%d %H:%M")}:
         - Sentiment score definition : x <= -0.35: Bearish; -0.35 < x <= -0.15: Somewhat-Bearish; -0.15 < x < 0.15: Neutral; 0.15 <= x < 0.35: Somewhat_Bullish; x >= 0.35: Bullish
-        """
+        """]
 
         for i, article in enumerate(data['feed']):
-            formatted_information += f"""
+            content = f"""
             Article {i+1}:
             - Title: {article['title']}
             - Time Published: {article['time_published']}
@@ -219,6 +219,7 @@ class MarketSearchingTools:
             - Sentiment Label: {article['overall_sentiment_label']}
             - Summary: {article['summary']}
             """
+            formatted_information.append(content)
         
         return formatted_information
 
@@ -248,6 +249,32 @@ class MarketSearchingTools:
             asset_industry = data['Industry'],
             asset_description = data['Description'],
         )
+    
+
+    def get_price(self, ticker: str, previous_day: int) -> str: 
+        """
+        This tool retrieves the historical price data for a given stock ticker.
+        Args:
+            ticker: The stock ticker symbol (e.g., 'AAPL', 'MSFT')
+        Returns:
+            Formatted string containing historical price data
+        """
+        url = rl = 'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=' + ticker + '&apikey=' + self.alpha_avantage_api_key + '&datatype=json&outputsize=compact'
+        response = requests.get(url)
+        if response.status_code != 200:
+            raise Exception(f"API fetch error. Status: {response.status_code}")
+        
+        data = response.json()
+        now = datetime.now().strftime("%Y-%m-%d")
+        previous_day = (datetime.now() - timedelta(days=previous_day)).strftime("%Y-%m-%d")
+        
+        price_data = f"This is the price data for {ticker} from {previous_day} to {now}:\n"
+
+        for date, price in data['Time Series (Daily)'].items():
+            date = datetime.strptime(date, "%Y-%m-%d").strftime("%Y-%m-%d")
+            if date >= previous_day and date <= now:
+                price_data += f"Date: {date}, Open: {price['1. open']}, High: {price['2. high']}, Low: {price['3. low']}, Close: {price['4. close']}\n"
+        return price_data
 
 
 def get_tools()   -> List[BaseTool]:
@@ -280,6 +307,11 @@ def get_tools()   -> List[BaseTool]:
             name="ticker_overview",
             func=tools_inst.ticket_overview_tool,
             description="Gets comprehensive overview information about a company including its sector, industry, and business description."
+        ), 
+        Tool(
+            name="get_price",
+            func=tools_inst.get_price,
+            description="Retrieves historical price data for a given stock ticker."
         )
 
     ]
@@ -314,7 +346,7 @@ if __name__ == '__main__':
         try : 
             print("Testing News API Tool...")
             print("Data:", data)
-            result = tools[1].run(data)
+            result = tools[1].func(data) 
             print("Result:", result)
             print("Success")
 
@@ -326,7 +358,7 @@ if __name__ == '__main__':
         try : 
             print("Testing Financial Report Tool...")
             print("Ticker:", ticker)
-            result = tools.financial_report_tool(ticker)
+            result = tools[2].run(ticker) 
             print("Result:", result)
             print("Success")
 
@@ -339,7 +371,7 @@ if __name__ == '__main__':
         try : 
             print("Testing Sentiment Analysis Tool...")
             print("Ticker:", ticker)
-            result = tools.sentiment_analysis_tool(ticker)
+            result = tools[3].run(ticker)
             print("Result:", result)
             print("Success")
 
@@ -351,7 +383,7 @@ if __name__ == '__main__':
         try : 
             print("Testing Ticket Overview Tool...")
             print("Ticker:", ticker)
-            result = tools.ticket_overview_tool(ticker)
+            result = tools[4].run(ticker)
             print("Result:", result)
             print("Success")
 
@@ -359,6 +391,16 @@ if __name__ == '__main__':
             print("Error:", e)
 
 
+    def test_get_price_tool(ticker, previous_day):
+        try : 
+            print("Testing Get Price Tool...")
+            print("Ticker:", ticker)
+            result = tools[5].func(ticker, previous_day)
+            print("Result:", result)
+            print("Success")
+
+        except Exception as e:
+            print("Error:", e)
 
     # Test the tools
     # query = "latest news on Apple Inc"
@@ -375,13 +417,14 @@ if __name__ == '__main__':
     )
 
 
-    test_news_api_tool(asset_data)
-    # test_financial_report_tool("AAPL", tools)
-    # test_sentiment_analysis_tool("AAPL", tools)
-    # test_ticket_overview_tool("AAPL", tools)
+    # test_news_api_tool(asset_data)
+    # test_financial_report_tool("AAPL")
+    # test_sentiment_analysis_tool("AAPL")
+    # test_ticket_overview_tool("AAPL")
+    test_get_price_tool("AAPL", 5)
 
 
-    # print("All tests completed.")
+    print("All tests completed.")
     
 
     
