@@ -16,10 +16,11 @@ requires = ["setuptools>=73.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["src.templates.market", "market", "memory", "tool", "llm", "prompts", "database"]
+packages = ["market", "reflection", "low_level", "memory", "tool", "llm", "prompts", "database"]
 [tool.setuptools.package-dir]
-"src.templates.market" = "src/modules/market"
 "market" = "src/modules/market"
+"reflection" = "src/modules/reflection"
+"low_level" = "src/modules/reflection/low_level"
 "memory" = "src/modules/memory"
 "tool" = "src/modules/tool"
 "llm" = "src/modules/llm"

@@ -1,6 +1,6 @@
-from .mi_memory import MIMemory
-from .llr_memory import LLRMemory
-from .hlr_memory import HLRMemory
+from memory.mi_memory import MIMemory
+from memory.llr_memory import LLRMemory
+from memory.hlr_memory import HLRMemory
 import pandas as pd
 import numpy as np
 from typing import List, Dict, Any

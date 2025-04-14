@@ -1,5 +1,5 @@
 from decision_making.decision import AugmentedTools, DecisionMakingModule
-from reflection.highlevel_reflection import HighLevelReflectionModule, LowLevelReflectionModule
+from src.modules.reflection.high_level.highlevel_reflection import HighLevelReflectionModule, LowLevelReflectionModule
 from decision_making.llm import MockLLMService
 from market_intelligence.market_intelligence import MarketIntelligenceModule
 from modules.memory.manager import MemoryModule
