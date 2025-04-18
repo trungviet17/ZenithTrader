@@ -10,6 +10,7 @@ from langchain_community.tools import TavilySearchResults
 from server.schema import AssetData
 from newsapi import NewsApiClient
 import requests 
+from langchain_core.tools import tool
 
 from dotenv import load_dotenv
 import os 
@@ -60,7 +61,7 @@ class MarketSearchingTools:
         return formatted_information
 
     
-    def news_api_tool(self, data: AssetData) -> List:
+    def news_api_tool(self, data: AssetData, hours_ago : int = 24) -> List:
         """
         This tool performs a news API search and returns the results.
         Args:
@@ -70,7 +71,7 @@ class MarketSearchingTools:
         """
 
         client = NewsApiClient( api_key  = self.news_api_key)
-        one_hour_ago = datetime.now() - timedelta(hours=24)
+        one_hour_ago = datetime.now() - timedelta(hours=hours_ago )
         
         all_articles = client.get_everything(
             q = data.asset_name, 
@@ -114,7 +115,7 @@ class MarketSearchingTools:
 
         income_data = response_income.json()
         balance_data = response_balance.json()
-
+        print(income_data)
         # take data by quarter and annual 
         income_annual = income_data['annualReports'][0]
         income_quarter = income_data['quarterlyReports'][0]
@@ -251,7 +252,7 @@ class MarketSearchingTools:
         )
     
 
-    def get_price(self, ticker: str, previous_day: int) -> str: 
+    def get_price(self, ticker: str, previous_day: int = 1) -> str: 
         """
         This tool retrieves the historical price data for a given stock ticker.
         Args:
@@ -282,12 +283,12 @@ def get_tools()   -> List[BaseTool]:
     tools_inst = MarketSearchingTools()
 
     return [
-
         Tool(
             name="web_search",
             func=tools_inst.web_search_tool,
             description="Searches the web for information about markets, companies, or financial topics."
         ),
+
         Tool(
             name="news_search",
             func=tools_inst.news_api_tool,
@@ -316,7 +317,33 @@ def get_tools()   -> List[BaseTool]:
 
     ]
 
+@tool
+def ticket_overview_tool( ticket: str) -> AssetData:
+        """
+        This tool retrieves comprehensive overview information about a stock ticker.
+        Args:
+            ticker: The stock ticker symbol (e.g., 'AAPL', 'MSFT') 
+        Returns:
+            AssetData object containing company information
+        """
 
+        url = "https://www.alphavantage.co/query?function=OVERVIEW&symbol=" + ticket + "&apikey=" + ALPHA_AVANTAGE_API_KEY
+        response = requests.get(url)
+
+        if response.status_code != 200: 
+            raise Exception(f"API fetch error. Status: {response.status_code}")
+        
+        data = response.json()
+
+        return AssetData(
+            asset_symbol = data['Symbol'],
+            asset_name  = data['Name'],
+            asset_type = data['AssetType'],
+            asset_exchange = data['Exchange'],
+            asset_sector = data['Sector'],
+            asset_industry = data['Industry'],
+            asset_description = data['Description'],
+        )
 
 
 
@@ -418,10 +445,10 @@ if __name__ == '__main__':
 
 
     # test_news_api_tool(asset_data)
-    # test_financial_report_tool("AAPL")
+    test_financial_report_tool("AAPL")
     # test_sentiment_analysis_tool("AAPL")
     # test_ticket_overview_tool("AAPL")
-    test_get_price_tool("AAPL", 5)
+    # test_get_price_tool("AAPL", 5)
 
 
     print("All tests completed.")

@@ -114,7 +114,7 @@ def create_latest_prompt_template(asset_data : AssetData) -> PromptTemplate:
         3. Use the "financial_report" tool to obtain comprehensientiment for {{asset_symbol}}
         5. Use the "get_price" tool to get historical price datave financial data for {{asset_symbol}}
         4. Use the "sentiment_analysis" tool to analyze market s for {{asset_symbol}}
-
+get_latest_information
         {market_intelligence_effect_prompt}
 
 
