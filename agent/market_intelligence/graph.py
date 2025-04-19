@@ -23,24 +23,22 @@ def create_graph():
     graph_builder.add_node("latest_market_intelligent", latest_market_intelligent)
     graph_builder.add_node("past_market_intelligent", past_market_intelligent)
     graph_builder.add_node("past_market_intelligence_retrieval", past_market_intelligence_retrieval)
-    graph_builder.add_node("search_tool_1", search_tool)
-    graph_builder.add_node("search_tool_2", search_tool)
+    graph_builder.add_node("search_tool", search_tool)
 
     # edges 
     graph_builder.add_edge(START, "latest_market_intelligent")
     graph_builder.add_edge("latest_market_intelligent", "past_market_intelligence_retrieval")
     graph_builder.add_edge("past_market_intelligence_retrieval", "past_market_intelligent")
 
-    graph_builder.add_edge("search_tool_1", "latest_market_intelligent")
-    graph_builder.add_edge("search_tool_2", "past_market_intelligent")
 
-    graph_builder.add_conditional_edges("latest_market_intelligent", tools_condition, {
-        "tools" : "search_tool_1",
-        "__end__" : "past_market_intelligence_retrieval"
+    graph_builder.add_edge("search_tool", "past_market_intelligence_retrieval")
+
+    
+    graph_builder.add_conditional_edges("past_market_intelligence_retrieval", tools_condition, {
+        "tools" : "search_tool",
+        END: "past_market_intelligent"
     })
-    graph_builder.add_conditional_edges("past_market_intelligent", tools_condition, ["search_tool_2", END])
-
-
+    graph_builder.add_edge("past_market_intelligent", END)
     graph = graph_builder.compile()
     return graph 
 

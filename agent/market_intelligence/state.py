@@ -59,6 +59,6 @@ class MarketIntelligenceState(BaseModel):
     past_intelligent : Optional[PastMarketOutput] = None
     latest_intelligent : Optional[LatestMarketOutput] = None
 
-    past_infor : Optional[str] = None
+    information : Optional[str] = None
     messages: List[Dict[str, Any]] = []
 

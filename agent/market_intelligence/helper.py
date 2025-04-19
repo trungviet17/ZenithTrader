@@ -7,7 +7,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 from agent.market_intelligence.tools import MarketSearchingTools
 from server.schema import AssetData
 from langchain_google_genai import ChatGoogleGenerativeAI
-from agent.market_intelligence.tools import get_tools, ticket_overview_tool
+from agent.market_intelligence.tools import get_tools
 from typing import Union , Type
 from agent.market_intelligence.state import LatestMarketOutput, PastMarketOutput, MarketQuery 
 from langchain_chroma import Chroma
@@ -81,6 +81,26 @@ class LatestMarketOutputParser(BaseOutputParser):
 
 
 
+class RetrievalInformationParser(BaseOutputParser):
+
+    def parse(self, text: str) -> str: 
+
+        try : 
+            if text.strip().startswith("```"):
+                text = re.sub(r"```json|```", "", text).strip()
+            data = json.loads(text)
+            if not bool(data.get("information_sufficient")): 
+                return ""
+            return data.get("adding_information", "")
+        
+
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Failed to parse output: {e}")
+        except Exception as e:
+            raise ValueError(f"Failed to parse output: {e}")
+
+
+
 def get_latest_information(data: AssetData) -> str:
 
     tools = MarketSearchingTools()
@@ -126,12 +146,16 @@ def get_latest_information(data: AssetData) -> str:
 
 
 
-def get_llm_with_tools(model : str = "gemini-2.0-flash"):
+def get_llm(model : str = "gemini-2.0-flash", have_tools: bool = True) :
+
     
     llm = ChatGoogleGenerativeAI(model = model, api_key = GEMINI_API_KEY, temperature = 0.5)
-    # tools = get_tools() 
+    if have_tools : 
+        tools = get_tools() 
 
-    return llm.bind_tools([ticket_overview_tool])
+        return llm.bind_tools(tools)
+
+    return llm 
 
 
 

@@ -105,21 +105,9 @@ def create_latest_prompt_template(asset_data : AssetData) -> PromptTemplate:
         Latest market intelligence and prices are as follows: 
         {{latest_market_intelligence}}
 
-
-        You can use the following tools to retrieve latest market intelligence and prices for {{asset_symbol}} 
-        if all latest market intelligence is not enough to analyze the market intelligence:
-
-        1. Use the "web_search" tool to find general market information about {{asset_symbol}}
-        2. Use the "news_search" tool to retrieve recent news articles about {{asset_symbol}}
-        3. Use the "financial_report" tool to obtain comprehensientiment for {{asset_symbol}}
-        5. Use the "get_price" tool to get historical price datave financial data for {{asset_symbol}}
-        4. Use the "sentiment_analysis" tool to analyze market s for {{asset_symbol}}
-get_latest_information
         {market_intelligence_effect_prompt}
 
-
         {new_latest_prompt_summary}
-
 
         {latest_outputformat}
 

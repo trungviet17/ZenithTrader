@@ -317,33 +317,6 @@ def get_tools()   -> List[BaseTool]:
 
     ]
 
-@tool
-def ticket_overview_tool( ticket: str) -> AssetData:
-        """
-        This tool retrieves comprehensive overview information about a stock ticker.
-        Args:
-            ticker: The stock ticker symbol (e.g., 'AAPL', 'MSFT') 
-        Returns:
-            AssetData object containing company information
-        """
-
-        url = "https://www.alphavantage.co/query?function=OVERVIEW&symbol=" + ticket + "&apikey=" + ALPHA_AVANTAGE_API_KEY
-        response = requests.get(url)
-
-        if response.status_code != 200: 
-            raise Exception(f"API fetch error. Status: {response.status_code}")
-        
-        data = response.json()
-
-        return AssetData(
-            asset_symbol = data['Symbol'],
-            asset_name  = data['Name'],
-            asset_type = data['AssetType'],
-            asset_exchange = data['Exchange'],
-            asset_sector = data['Sector'],
-            asset_industry = data['Industry'],
-            asset_description = data['Description'],
-        )
 
 
 

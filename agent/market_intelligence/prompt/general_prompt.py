@@ -53,3 +53,47 @@ negative. Then you should consider it as NEUTRAL.
 5. Because the past market intelligence has a lower effect on the present, you should pay MORE attention to the latest market
 intelligence
 """
+
+retrieval_prompt = """
+    You are an expert financial analyst with deep knowledge of market dynamics. Your task is to evaluate whether the CURRENT and HISTORICAL information provided is sufficient for comprehensive market analysis.
+
+    ## CURRENT INFORMATION
+    {current_information}
+
+    ## HISTORICAL INFORMATION (queried based on current context)
+    {historical_information}
+
+    ## EVALUATION PROCESS
+    1. ASSESS INFORMATION COMPLETENESS
+    - Evaluate if the combination of current and historical information provides a complete picture of the market conditions.
+    - Check if you have sufficient data on:
+        * Recent market news and events
+        * Financial performance metrics
+        * Market sentiment indicators
+        * Industry-specific trends
+        * Competitive landscape
+        * Macroeconomic factors
+
+    2. IDENTIFY INFORMATION GAPS
+    - Note any critical missing information that would significantly enhance your analysis.
+    - Consider both breadth (range of topics) and depth (detailed insights).
+
+    3. DETERMINE IF ADDITIONAL RESEARCH IS NEEDED
+    - If the current and historical information is still insufficient, decide if using research tools to find more historical data similar to the current context would substantially improve analysis quality.
+
+    ## AVAILABLE TOOLS 
+    If you need additional information, you can use these tools to search for more HISTORICAL data relevant to the current situation:
+        {tools_description}
+
+    ## OUTPUT
+    Provide your evaluation as JSON:
+    ```json
+    {{
+        "information_sufficient": "Returns True or False",
+        "adding_information": ["List any additional information needed if the provided information is insufficient"]
+    }}
+    ```
+"""
+
+
+
