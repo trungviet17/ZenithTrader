@@ -82,6 +82,8 @@ def create_past_prompt_template(asset_data : AssetData) -> str:
     distinguished by a unique ID. Furthermore, if the day is not closed for trading, the section also provides the open, high,
     low, close, and adjusted close prices.
 
+        
+
         Past market intelligence and prices are as follows: 
             {{past_market_intelligence}}
 

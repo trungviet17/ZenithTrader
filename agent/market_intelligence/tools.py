@@ -183,7 +183,7 @@ class MarketSearchingTools:
         return formatted_information
 
 
-    def sentiment_analysis_tool(self, ticker: str, limit : int = 10, hour_ago: int = 16) -> List:
+    def sentiment_analysis_tool(self, ticker: str, limit : int = 10, hour_ago: int = 16, is_has_hour_ago : bool = True) -> List:
         """
         Performs sentiment analysis on recent news articles related to a specified ticker symbol.
         Args:
@@ -197,8 +197,11 @@ class MarketSearchingTools:
         one_hour_ago = now - timedelta(hours=hour_ago)
         time_from = one_hour_ago.strftime("%Y%m%dT%H%M")
 
-
-        url = "https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers=" +  ticker + "&apikey=" + self.alpha_avantage_api_key + "&limit=" + str(limit) + "&time_from=" + str(time_from) + "&sort=LATEST"
+        if  is_has_hour_ago:
+            url = "https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers=" +  ticker + "&apikey=" + self.alpha_avantage_api_key + "&limit=" + str(limit) + "&time_from=" + str(time_from) + "&sort=LATEST"
+        
+        else: 
+            url = "https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers=" +  ticker + "&apikey=" + self.alpha_avantage_api_key + "&limit=" + str(limit) + "&sort=LATEST"
         print(url) 
         response = requests.get(url)
         if response.status_code != 200: 
@@ -428,6 +431,7 @@ if __name__ == '__main__':
     
 
     
+
 
 
 
