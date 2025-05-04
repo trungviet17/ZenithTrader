@@ -590,9 +590,3 @@ if __name__ == "__main__":
     print("\n--- Kết quả Phân tích Cuối cùng ---")
     if final_result_state.get("final_output"):
         print(final_result_state["final_output"])
-    else:
-        print("Không có kết quả cuối cùng hoặc đã xảy ra lỗi.")
-        if final_result_state.get("messages"):
-            last_message = final_result_state["messages"][-1].content
-            if "Lỗi:" in last_message:
-                 print("\nLỗi gặp phải:", last_message)

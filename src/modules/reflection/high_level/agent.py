@@ -1,191 +1,432 @@
-import pandas as pd
+import yfinance as yf
 from datetime import datetime
+import pytz
+import pandas as pd
+import numpy as np
+from typing import TypedDict, Annotated, List, Dict, Any, Literal, Optional
+from uuid import uuid4
+
+# Langchain và Qdrant imports
 from langchain_core.tools import tool
-from langchain_ollama import OllamaLLM
-from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import add_messages
-from typing import TypedDict, Annotated, List, Dict, Any
-from langchain_core.messages import HumanMessage
+from langchain_ollama import ChatOllama, OllamaEmbeddings
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
+from langchain_core.documents import Document
 from langchain_qdrant import QdrantVectorStore
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, VectorParams
-from langchain_ollama import OllamaEmbeddings
-from langchain_core.documents import Document
-from uuid import uuid4
-import pytz
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
 
-# Initialize LLM and vector store
-llm = OllamaLLM(model="cogito:3b")
+# --- Khởi tạo LLM, Embeddings và Vector Store ---
+llm = ChatOllama(model="cogito:3b")
 embeddings = OllamaEmbeddings(model="cogito:3b")
-client = QdrantClient(path="./qdrant_data")
 
-# client.create_collection(
-#     collection_name="low_level_reflection",
-#     vectors_config=VectorParams(size=3072, distance=Distance.COSINE),
-# )
+# --- Thiết lập Qdrant ---
+QDRANT_PATH = "./high_level/qdrant_data"
+COLLECTION_NAME = "high_level_reflection_history"
+client = QdrantClient(path=QDRANT_PATH)
+
+def create_qdrant_collection(client: QdrantClient, collection_name: str, vector_size: int):
+    """Tạo collection Qdrant nếu nó chưa tồn tại."""
+    try:
+        client.get_collection(collection_name=collection_name)
+    except Exception:
+        client.create_collection(
+            collection_name=collection_name,
+            vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
+        )
+
+embedding_size = len(embeddings.embed_query("test"))
+create_qdrant_collection(client, COLLECTION_NAME, embedding_size)
 
 vector_store = QdrantVectorStore(
     client=client,
-    collection_name="low_level_reflection",
+    collection_name=COLLECTION_NAME,
     embedding=embeddings,
 )
-# Add sample documents
-content_1 = "LangChain is a framework for developing applications powered by language models."
-content_2 = "It provides a standard interface for LLMs and tools to build applications."
-document_1 = Document(page_content=content_1, metadata={"timestamp": "2023-10-01"})
-document_2 = Document(page_content=content_2, metadata={"timestamp": "2023-10-02"})
-documents = [document_1, document_2]
-uuids = [str(uuid4()) for _ in range(len(documents))]
-vector_store.add_documents(documents=documents, ids=uuids)
-retriever = vector_store.as_retriever(search_type="mmr", search_kwargs={"k": 1})
+
+retriever = vector_store.as_retriever(search_type="mmr", search_kwargs={"k": 3, "fetch_k": 6})
+
+# --- Định nghĩa State cho High-Level Reflection Agent ---
+class HighLevelReflectionState(TypedDict):
+    messages: Annotated[List[BaseMessage], add_messages]
+    symbol: str
+    market_data: Optional[str]           # Dữ liệu thị trường từ Market Agent
+    technical_analysis: Optional[str]     # Phân tích kỹ thuật từ TA Agent
+    trade_history: Optional[List[Dict]]   # Lịch sử giao dịch
+    current_decision_analysis: str        # Phân tích quyết định hiện tại
+    reflection_query: Optional[str]       # Truy vấn reflection
+    historical_insights: Optional[str]    # Thông tin lịch sử từ vector store
+    reflection_iteration: int             # Số lần lặp reflection
+    max_reflections: int                  # Số lần lặp tối đa
+    final_output: Optional[str]           # Kết quả cuối cùng
+
+# --- Tools cho High-Level Reflection ---
 
 @tool
-def process_trading_decisions(trades: list) -> str:
+def fetch_market_data(symbol: str) -> str:
     """
-    Xử lý dữ liệu giao dịch, tính toán lợi nhuận tích lũy và tạo biểu đồ.
+    Lấy bối cảnh thị trường chung và tin tức liên quan đến cổ phiếu.
+    
+    Args:
+        symbol: Mã cổ phiếu (ticker symbol).
+    
+    Returns:
+        Chuỗi mô tả bối cảnh thị trường và tin tức liên quan.
     """
-    try:
-        if not trades:
-            return "Error: No trading decisions provided."
-
-        # Convert trades to DataFrame
-        df = pd.DataFrame(trades)
-        if 'timestamp' not in df.columns or 'symbol' not in df.columns or 'decision' not in df.columns or 'price' not in df.columns:
-            return "Error: Invalid trade data format."
-
-        # Calculate returns
-        df['return'] = df.groupby('symbol')['price'].pct_change().fillna(0)
-        df['cumulative_return'] = (1 + df['return']).cumprod() - 1
-
-        # Calculate statistics
-        correct_decisions = df[df['return'] > 0].shape[0]
-        total_decisions = df.shape[0]
-        success_rate = (correct_decisions / total_decisions) * 100 if total_decisions > 0 else 0
-
-        return "\n".join([
-            f"Tổng số giao dịch: {total_decisions}",
-            f"Tỷ lệ giao dịch thành công: {success_rate:.2f}%",
-            "Chi tiết lợi nhuận theo mã:",
-            *[
-                f"- {symbol}: Lợi nhuận trung bình {df[df['symbol'] == symbol]['return'].mean() * 100:.2f}%"
-                for symbol in df['symbol'].unique()
-            ]
-        ])
-    except Exception as e:
-        return f"Error: Failed to process trading decisions: {str(e)}"
-
-# Define state
-class AgentState(TypedDict):
-    messages: Annotated[List[Any], add_messages]
-    trades: List[Dict[str, Any]]
-    trade_analysis: str
-    llm_reflection: str
-    paste_lessons: str
-    lessons_learned: str
-    output: str
-
-# Define nodes
-def fetch_trade_data(state: AgentState) -> AgentState:
-    """Node để xử lý dữ liệu giao dịch."""
-    trades = state["trades"]
-    result = process_trading_decisions.invoke({"trades": trades})
-    return {"trade_analysis": result}
-
-def analyze_decisions(state: AgentState) -> AgentState:
-    """Node để phân tích quyết định giao dịch."""
-    trade_analysis = state["trade_analysis"]
-    prompt = (
-        f"Dựa trên dữ liệu giao dịch:\n{trade_analysis}\n"
-        "Phân tích các quyết định giao dịch, xác định điểm mạnh, điểm yếu, "
-        "và đề xuất cải tiến. Trả về tối đa 300 token."
+    return (
+        f"Bối cảnh Thị trường Mô phỏng cho {symbol}:\n"
+        f"- Tổng quan: Thị trường chung có xu hướng đi ngang trong vài tuần qua.\n"
+        f"- Ngành: [Ngành của {symbol}] đang có dấu hiệu tích lũy.\n"
+        f"- Tin tức {symbol}: Không có tin tức trọng yếu nào gần đây ảnh hưởng đến giá."
     )
-    response = llm.invoke(prompt)
-    return {"llm_reflection": response}
-
-def generate_lessons(state: AgentState) -> AgentState:
-    """Node để rút ra bài học."""
-    llm_reflection = state["llm_reflection"]
-    prompt = (
-        f"Dựa trên phân tích:\n{llm_reflection}\n"
-        "Rút ra các bài học chính từ các quyết định giao dịch, "
-        "tập trung vào những thành công và sai lầm. "
-        "Trả về tối đa 200 token."
-    )
-    lessons = llm.invoke(prompt)
     
-    # Store lessons in vector store
-    analysis_doc = Document(
-        id=f"lessons_{datetime.now(pytz.UTC).isoformat()}",
-        page_content=lessons,
-        metadata={"timestamp": datetime.now(pytz.UTC).isoformat()}
-    )
-    vector_store.add_documents(documents=[analysis_doc])
+@tool
+def fetch_TA_data(symbol: str) -> str:
+    """
+    Lấy phân tích kỹ thuật cho cổ phiếu.
+    Args:
+        symbol: Mã cổ phiếu (ticker symbol).
+        
+    Returns:
+        Chuỗi mô tả phân tích kỹ thuật cho cổ phiếu.
     
-    return {"lessons_learned": lessons}
-
-def paste_lessons(state: AgentState) -> AgentState:
-    """Node để dán bài học."""
-    trade_analysis = state["trade_analysis"]
-    prompt = (
-        f"Dựa trên phân tích:\n{trade_analysis}\n"
-        "Tạo một truy vấn cho LLM cho các bài học quá khứ liên quan.\n"
-        "Truy vấn này sẽ được sử dụng để lấy thông tin bổ sung từ LLM.\n"
-        "Đầu ra chỉ cần là một câu hỏi, không cần giải thích hay thông tin bổ sung.\n"
+    """
+    return (
+        f"Phân tích Kỹ thuật Mô phỏng cho {symbol}:\n"
+        f"- Xu hướng: Bullish (MA20 > MA50).\n"
+        f"- RSI: 65 (Neutral, gần Overbought).\n"
+        f"- MACD: Bullish Crossover.\n"
+        f"- Hỗ trợ: 145; Kháng cự: 155.\n"
+        f"- Dự báo ngắn hạn: Tăng nhẹ trong vài tuần tới."
     )
-    query = llm.invoke(prompt)
-    paste_lessons = retriever.invoke(query)
-    return {"paste_lessons": paste_lessons}
 
-def format_output(state: AgentState) -> AgentState:
-    """Node để định dạng output."""
-    output = (
-        f"Phân tích giao dịch:\n{state['trade_analysis']}\n"
-        f"Phân tích quyết định:\n{state['llm_reflection']}\n"
-        f"Bài học rút ra:\n{state['paste_lessons']}\n"
-    )
-    return {"output": output}
-
-# Create workflow
-workflow = StateGraph(AgentState)
-
-# Add nodes
-workflow.add_node("fetch_trade_data", fetch_trade_data)
-workflow.add_node("analyze_decisions", analyze_decisions)
-workflow.add_node("past_lessons", paste_lessons)
-workflow.add_node("generate_lessons", generate_lessons)
-workflow.add_node("format_output", format_output)
-
-# Define edges
-workflow.add_edge(START, "fetch_trade_data")
-workflow.add_edge("fetch_trade_data", "analyze_decisions")
-workflow.add_edge("fetch_trade_data", "past_lessons")
-workflow.add_edge("analyze_decisions", "generate_lessons")
-workflow.add_edge("analyze_decisions", "format_output")
-workflow.add_edge("past_lessons", "format_output")
-workflow.add_edge("format_output", END)
-
-# Compile graph
-graph = workflow.compile()
-
-# Test
-if __name__ == "__main__":
-    sample_trades = [
-        {"timestamp": "2023-10-01", "symbol": "AAPL", "decision": "Buy", "price": 150.0},
-        {"timestamp": "2023-10-02", "symbol": "AAPL", "decision": "Sell", "price": 155.0},
-        {"timestamp": "2023-10-03", "symbol": "AAPL", "decision": "Buy", "price": 300.0},
-        {"timestamp": "2023-10-04", "symbol": "AAPL", "decision": "Sell", "price": 290.0}
+@tool
+def fetch_trade_history(symbol: str) -> List[Dict]:
+    """
+    Lấy lịch sử giao dịch giả lập cho cổ phiếu.
+    
+    Args:
+        symbol: Mã cổ phiếu (ticker symbol).
+        
+    Returns:
+        Danh sách các giao dịch với thông tin chi tiết.
+    """
+    # Mô phỏng lịch sử giao dịch trong 3 tháng
+    return [
+        {
+            "trade_id": str(uuid4()),
+            "symbol": symbol,
+            "date": "2025-02-15",
+            "action": "Buy",
+            "price": 150.0,
+            "quantity": 100,
+            "reason": "RSI cho tín hiệu oversold, MACD crossover tích cực.",
+            "outcome": "Profit",
+            "profit_loss": 500.0,
+            "analysis": "Quyết định đúng do giá tăng sau tín hiệu kỹ thuật."
+        },
+        {
+            "trade_id": str(uuid4()),
+            "symbol": symbol,
+            "date": "2025-03-10",
+            "action": "Sell",
+            "price": 155.0,
+            "quantity": 100,
+            "reason": "Giá chạm kháng cự mạnh tại 155, RSI overbought.",
+            "outcome": "Loss",
+            "profit_loss": -200.0,
+            "analysis": "Quyết định sai do giá tiếp tục tăng sau khi bán."
+        }
     ]
-    
-    initial_state = {
-        "messages": [HumanMessage(content="Phân tích các quyết định giao dịch trước đây")],
-        "trades": sample_trades,
-        "trade_analysis": "",
-        "llm_reflection": "",
-        "paste_lessons": "",
-        "lessons_learned": "",
-        "output": ""
+
+# --- Hàm tiện ích ---
+def save_analysis(analysis: str, symbol: str) -> str:
+    """Lưu phân tích hoặc insight vào vector store."""
+    now = datetime.now(pytz.UTC)
+    doc_id = str(uuid4())
+    metadata = {
+        "timestamp": now.isoformat(),
+        "symbol": symbol,
     }
+    content = analysis
+
+    try:
+        vector_store.add_documents(documents=[Document(page_content=content, metadata=metadata)], ids=[doc_id])
+        return f"Saved reflection to vector store (ID: {doc_id})"
+    except Exception as e:
+        return f"Failed to save reflection to vector store: {e}"
+
+# --- Các Node của Graph ---
+
+def get_initial_data(state: HighLevelReflectionState) -> HighLevelReflectionState:
+    """Node: Lấy dữ liệu thị trường, phân tích kỹ thuật, lịch sử giao dịch và bối cảnh thị trường."""
+    symbol = state["symbol"]
+    messages = state["messages"]
+
+    # Lấy dữ liệu thị trường
+    market_data = fetch_market_data.invoke({"symbol": symbol})
+
+    # Lấy phân tích kỹ thuật
+    technical_analysis = fetch_TA_data.invoke({"symbol": symbol})
+
+    # Lấy lịch sử giao dịch
+    trade_history = fetch_trade_history.invoke({"symbol": symbol})
+
+    return {
+        **state,
+        "market_data": market_data,
+        "technical_analysis": technical_analysis,
+        "trade_history": trade_history,
+        "reflection_iteration": 0,
+        "messages": messages + [AIMessage(content=f"Đã lấy dữ liệu thị trường, phân tích kỹ thuật, và lịch sử giao dịch cho {symbol}.")]
+    }
+
+def generate_analysis(state: HighLevelReflectionState) -> HighLevelReflectionState:
+    """Node: Tạo phân tích quyết định giao dịch ban đầu."""
+    market_data = state["market_data"]
+    technical_analysis = state["technical_analysis"]
+    trade_history = state["trade_history"]
+    symbol = state["symbol"]
+    messages = state["messages"]
+
+    # Format lịch sử giao dịch
+    trade_summary = "\n".join([
+        f"- Trade {t['date']} ({t['action']} @ {t['price']}): {t['reason']} Outcome: {t['outcome']} (P/L: {t['profit_loss']}). Analysis: {t['analysis']}"
+        for t in trade_history
+    ])
+
+    prompt = f"""Bạn là chuyên gia phân tích giao dịch chứng khoán, hãy đánh giá và cải thiện các quyết định giao dịch cho {symbol}. 
+                Dựa trên thông tin sau, đưa ra phân tích ban đầu về các quyết định giao dịch:
+                
+                **Bối cảnh Thị trường:**
+                {market_data}
+
+                **Phân tích Kỹ thuật:**
+                {technical_analysis}
+
+                **Lịch sử Giao dịch:**
+                {trade_summary}
+
+                **Yêu cầu:**
+                1. Đánh giá tính đúng/sai của các quyết định giao dịch trong lịch sử (dựa trên phân tích kỹ thuật và outcome).
+                2. Phân tích lý do tại sao các quyết định đúng hoặc sai.
+                3. Đề xuất cải thiện cho các quyết định giao dịch trong tương lai.
+                4. Đưa ra khuyến nghị giao dịch hiện tại dựa trên phân tích kỹ thuật và bối cảnh thị trường.
+
+                **Phân tích ban đầu của bạn:**
+                """
+
+    analysis_message = llm.invoke(prompt)
+    analysis_content = analysis_message.content
+
+    return {
+        **state,
+        "current_decision_analysis": analysis_content,
+        "reflection_iteration": 0,
+        "messages": messages + [AIMessage(content=f"Phân tích quyết định ban đầu cho {symbol}:\n{analysis_content}")]
+    }
+
+def generate_reflection_query(state: HighLevelReflectionState) -> HighLevelReflectionState:
+    """Node: Tạo câu hỏi reflection để cải thiện phân tích quyết định."""
+    current_analysis = state["current_decision_analysis"]
+    symbol = state["symbol"]
+    trade_history = state["trade_history"]
+    messages = state["messages"]
+    iteration = state["reflection_iteration"]
+    max_reflections = state["max_reflections"]
+
+    if not current_analysis or iteration >= max_reflections:
+        return {**state, "reflection_query": None}
+
+    trade_summary = "\n".join([
+        f"- {t['action']} @ {t['date']}: {t['outcome']} (P/L: {t['profit_loss']})"
+        for t in trade_history
+    ])
+
+    prompt = f"""Xem xét phân tích quyết định giao dịch cho {symbol}:
+            **Phân tích Hiện tại:**
+            {current_analysis}
+
+            **Lịch sử Giao dịch Tóm tắt:**
+            {trade_summary}
+
+            **Yêu cầu:**
+            Để cải thiện phân tích quyết định, đặt 1-2 câu hỏi cụ thể cần kiểm tra trong lịch sử (các quyết định giao dịch trước đây của {symbol}). 
+            Tập trung vào điểm không chắc chắn, sai lầm trong quyết định, hoặc cơ hội cải thiện.
+
+            **Ví dụ:**
+            - "Khi RSI ở mức tương tự, các quyết định mua/bán trước đây có thành công không?"
+            - "Tín hiệu kháng cự tại 155 có thường xuyên bị phá vỡ trong lịch sử không?"
+            - "Quyết định bán dựa trên RSI overbought có đáng tin cậy không?"
+
+            **Câu hỏi reflection của bạn:**
+            """
+
+    query_message = llm.invoke(prompt)
+    query_content = query_message.content
+
+    return {
+        **state,
+        "reflection_query": query_content,
+        "messages": messages + [AIMessage(content=f"Câu hỏi Reflection (Iter {iteration}, 3mo):\n{query_content}")]
+    }
+
+def retrieve_historical(state: HighLevelReflectionState) -> HighLevelReflectionState:
+    """Node: Truy vấn vector store lấy thông tin lịch sử."""
+    query = state["reflection_query"]
+    messages = state["messages"]
+
+    if not query:
+        return {**state, "historical_insights": "Không có truy vấn reflection."}
+
+    enhanced_query = f"{query}"
+    try:
+        retrieved_docs = retriever.invoke(enhanced_query)
+        insights = f"Không tìm thấy lịch sử liên quan đến: '{query}'."
+        if retrieved_docs:
+            insights_list = []
+            for i, doc in enumerate(retrieved_docs):
+                metadata = doc.metadata
+                content_preview = doc.page_content[:200] + "..."
+                insights_list.append(
+                    f"Insight {i+1} ({metadata.get('symbol', 'N/A')}, {metadata.get('timeframe','?')}, {metadata.get('type', '?')}):\n'{content_preview}'"
+                )
+            insights = f"Tìm thấy {len(retrieved_docs)} ghi chú lịch sử liên quan '{query}':\n\n" + "\n\n".join(insights_list)
+
+    except Exception as e:
+        insights = f"Lỗi khi truy xuất lịch sử: {e}"
+
+    return {
+        **state,
+        "historical_insights": insights,
+        "messages": messages + [AIMessage(content=f"Kết quả truy vấn lịch sử:\n{insights}")]
+    }
+
+def refine_decision_analysis(state: HighLevelReflectionState) -> HighLevelReflectionState:
+    """Node: Tinh chỉnh phân tích quyết định dựa trên thông tin lịch sử."""
+    current_analysis = state["current_decision_analysis"]
+    historical_insights = state["historical_insights"]
+    symbol = state["symbol"]
+    messages = state["messages"]
+    iteration = state["reflection_iteration"]
+    max_reflections = state["max_reflections"]
+
+    if not historical_insights or iteration >= max_reflections:
+        return {**state, "reflection_iteration": iteration + 1}
+
+    prompt = f"""Cải thiện phân tích quyết định giao dịch cho {symbol}.
+
+            **Phân tích Hiện tại:**
+            {current_analysis}
+
+            **Thông tin Lịch sử:**
+            {historical_insights}
+
+            **Yêu cầu:**
+            1. Xem xét thông tin lịch sử và so sánh với phân tích hiện tại.
+            2. Cập nhật đánh giá về các quyết định giao dịch (tại sao đúng/sai, cải thiện).
+            3. Đưa ra khuyến nghị giao dịch hiện tại dựa trên dữ liệu mới.
+            4. Nếu lịch sử không hữu ích, ghi nhận và điều chỉnh nhẹ.
+
+            **Phân tích đã tinh chỉnh:**
+            """
+
+    refined_analysis_message = llm.invoke(prompt)
+    refined_analysis_content = refined_analysis_message.content
+
+    return {
+        **state,
+        "current_decision_analysis": refined_analysis_content,
+        "reflection_iteration": iteration + 1,
+        "messages": messages + [AIMessage(content=f"Phân tích quyết định đã tinh chỉnh (Iter {iteration + 1}):\n{refined_analysis_content}")]
+    }
+
+def format_final_output(state: HighLevelReflectionState) -> HighLevelReflectionState:
+    """Node: Định dạng kết quả cuối cùng."""
+    symbol = state["symbol"]
+    final_analysis = state["current_decision_analysis"]
+    messages = state["messages"]
+
+    if not final_analysis:
+        output = f"Không thể hoàn thành phân tích quyết định cho {symbol} do thiếu dữ liệu."
+        return {**state, "final_output": output, "messages": messages + [AIMessage(content=output)]}
+
+    save_analysis(final_analysis, symbol)
+
+    output = f"""# Phân tích Quyết định Giao dịch {symbol}:
+                {final_analysis}
+            """
+
+    return {**state, "final_output": output, "messages": messages + [AIMessage(content=output)]}
+
+# --- Xây dựng Graph ---
+
+def reflection_condition(state: HighLevelReflectionState) -> Literal["retrieve_historical", "format_final_output"]:
+    iteration = state["reflection_iteration"]
+    max_reflections = state["max_reflections"]
+    query = state["reflection_query"]
+
+    if query and iteration < max_reflections:
+        return "retrieve_historical"
     
-    result = graph.invoke(initial_state)
-    print("Kết quả phân tích High-level Reflection:")
-    print(result["output"])
+    return "format_final_output"
+
+def build_workflow():
+    """Xây dựng và biên dịch graph LangGraph."""
+    workflow = StateGraph(HighLevelReflectionState)
+
+    workflow.add_node("get_initial_data", get_initial_data)
+    workflow.add_node("generate_analysis", generate_analysis)
+    workflow.add_node("generate_reflection_query", generate_reflection_query)
+    workflow.add_node("retrieve_historical", retrieve_historical)
+    workflow.add_node("refine_decision_analysis", refine_decision_analysis)
+    workflow.add_node("format_final_output", format_final_output)
+
+    workflow.add_edge(START, "get_initial_data")
+    workflow.add_edge("get_initial_data", "generate_analysis")
+    workflow.add_edge("generate_analysis", "generate_reflection_query")
+    workflow.add_conditional_edges(
+        "generate_reflection_query",
+        reflection_condition,
+        {
+            "retrieve_historical": "retrieve_historical",
+            "format_final_output": "format_final_output"
+        }
+    )
+    workflow.add_edge("retrieve_historical", "refine_decision_analysis")
+    workflow.add_edge("refine_decision_analysis", "generate_reflection_query")
+    workflow.add_edge("format_final_output", END)
+
+    return workflow.compile()
+
+graph = build_workflow()
+
+# --- Chạy thử nghiệm ---
+if __name__ == "__main__":
+    symbol_to_analyze = "AAPL"
+    max_reflections = 1
+
+    graph = build_workflow()
+
+    initial_state = {
+        "messages": [HumanMessage(content=f"Phân tích quyết định giao dịch {symbol_to_analyze}.")],
+        "symbol": symbol_to_analyze,
+        "max_reflections": max_reflections,
+        "reflection_iteration": 0,
+        "current_decision_analysis": "",
+        "reflection_query": None,
+        "historical_insights": None,
+        "market_data": None,
+        "technical_analysis": None,
+        "trade_history": None,
+        "final_output": None,
+    }
+
+    print(f"\n--- Bắt đầu Workflow Phân tích Quyết định Giao dịch (3 tháng) cho {symbol_to_analyze} ---")
+    final_result_state = graph.invoke(initial_state)
+    print(f"\n--- Workflow Phân tích Quyết định Giao dịch cho {symbol_to_analyze} Hoàn thành ---")
+
+    print("\n--- Kết quả Phân tích Cuối cùng ---")
+    if final_result_state.get("final_output"):
+        print(final_result_state["final_output"])
