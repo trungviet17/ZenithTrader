@@ -40,44 +40,88 @@ def initialize_state(state: BuffettState) -> BuffettState:
             {"role": "user", "content": f"Analyzing {ticker} as of {end_date}"}
         ])
     
-    state.current_step = "FETCH_FINANCIAL_DATA"
+    state.current_step = "fetch_financial_data"
     return state
 
 def fetch_financial_data(state: BuffettState) -> BuffettState:
     """Fetch all required financial data for analysis."""
-    state = BuffettState(**state)
     ticker = state.ticker
-    end_date =  state.end_date
+    end_date = state.end_date
     
     try:
-        # Fetch metrics
-        metrics = get_financial_metrics(ticker, end_date, period="ttm", limit=5)
+        # Determine paths to potential JSON data files
+        current_dir = os.path.dirname(os.path.abspath(__file__))  # trading_strategy folder
+        api_dir = os.path.join(os.path.dirname(current_dir), "api")  # api folder
         
-        # Fetch financial line items
-        financial_line_items = search_line_items(
-            ticker,
-            [
-                "capital_expenditure",
-                "depreciation_and_amortization",
-                "net_income",
-                "outstanding_shares",
-                "total_assets",
-                "total_liabilities",
-                "dividends_and_other_cash_distributions",
-                "issuance_or_purchase_of_equity_shares",
-            ],
-            end_date,
-        )
+        metrics_file = os.path.join(api_dir, f"{ticker}_financial_metrics.json")
+        line_items_file = os.path.join(api_dir, f"{ticker}_line_items.json")
+        
+        # Check for metrics file and load if exists
+        if os.path.exists(metrics_file):
+            with open(metrics_file, 'r') as f:
+                metrics_data = json.load(f)
+                metrics = metrics_data.get('financial_metrics', [])
+                state.messages.append({
+                    "role": "assistant", 
+                    "content": f"Loaded financial metrics from file for {ticker}"
+                })
+
+
+
+        else:
+            # Fall back to API call
+            metrics = get_financial_metrics(ticker, limit=10)['financial_metrics']
+            with open(metrics_file, 'w') as f:
+                json.dump({"financial_metrics": metrics}, f)
+                state.messages.append({
+                    "role": "assistant", 
+                    "content": f"Fetched financial metrics from API for {ticker}"
+                })
+        
+        # Check for line items file and load if exists
+        line_items_to_search = [
+            "capital_expenditure",
+            "depreciation_and_amortization",
+            "net_income",
+            "outstanding_shares",
+            "total_assets",
+            "total_liabilities",
+            "dividends_and_other_cash_distributions",
+            "issuance_or_purchase_of_equity_shares",
+        ]
+        
+        if os.path.exists(line_items_file):
+            with open(line_items_file, 'r') as f:
+                financial_line_items = json.load(f)
+                financial_line_items = financial_line_items.get('search_results', [])
+                state.messages.append({
+                    "role": "assistant", 
+                    "content": f"Loaded line items from file for {ticker}"
+                })
+        else:
+            # Fall back to API call
+            financial_line_items = search_line_items(
+                ticker,
+                line_items_to_search,
+                end_date,
+            )['search_results']
+
+            with open(line_items_file, 'w') as f:
+                json.dump({"search_results": financial_line_items}, f)
+                state.messages.append({
+                    "role": "assistant", 
+                    "content": f"Fetched line items from API for {ticker}"
+                })
         
         # Get market cap
-        market_cap = metrics[0].get("marketCap")
+        market_cap = metrics[0].get("market_cap", 0) if metrics else 0
         
         # Update state
         state.metrics = metrics
         state.financial_line_items = financial_line_items
-       
-        state.current_step = "ANALYZE_FINANCIALS"
+        state.current_step = "analyze_financials"
         state.market_cap = market_cap
+        
         # Add a message
         state.messages.append({
             "role": "assistant", 
@@ -92,7 +136,7 @@ def fetch_financial_data(state: BuffettState) -> BuffettState:
             "content": f"Error fetching financial data: {str(e)}"
         })
     
-    return state 
+    return state
 
 def analyze_financials(state: BuffettState) -> BuffettState:
     """Run all financial analyses for Buffett strategy."""
@@ -209,6 +253,7 @@ def generate_signal(buffett_state: BuffettState) -> BuffettState:
             signal=signal
         )
 
+
         llm = ChatGoogleGenerativeAI(
             model="gemini-2.0-flash", 
             api_key = GEMINI_API_KEY
@@ -270,7 +315,7 @@ def router(buffett_state: BuffettState) -> str:
 
     
     if buffett_state.error:
-        return "error"
+        return "error_handler"
     
     return buffett_state.current_step
 
@@ -289,16 +334,29 @@ def create_buffett_agent() -> StateGraph:
     workflow.add_node("fetch_financial_data", fetch_financial_data)
     workflow.add_node("analyze_financials", analyze_financials)
     workflow.add_node("generate_signal", generate_signal)
-    workflow.add_node("error", handle_error)
+    workflow.add_node("error_handler", handle_error)
     
     # Add edges
     workflow.add_edge("initialize", "fetch_financial_data")
-    workflow.add_edge("fetch_financial_data", router)
-    workflow.add_edge("analyze_financials", router)
+    workflow.add_conditional_edges(
+        "fetch_financial_data",
+        router,
+        {
+            "error_handler": "error_handler",
+            "analyze_financials": "analyze_financials"
+        }
+    )
+    workflow.add_conditional_edges(
+        "analyze_financials",
+        router,
+        {
+            "error_handler": "error_handler",
+            "generate_signal": "generate_signal"
+        }
+    )
     workflow.add_edge("generate_signal", END)
-    workflow.add_edge("error", END)
-    
-    # Set the entry point
+    workflow.add_edge("error_handler", END)
+        # Set the entry point
     workflow.set_entry_point("initialize")
     
     # Compile the graph
@@ -319,3 +377,17 @@ def run_buffett_analysis(ticker: str, end_date: str = None) -> Dict:
     
     # Return the final state
     return final_state
+
+
+
+
+if __name__ == "__main__":
+    from pprint import pprint
+    ticker = "AAPL"
+    end_date = "2023-12-31"
+    
+    # Run the analysis
+    result = run_buffett_analysis(ticker, end_date)
+    
+    # Print the result
+    pprint(result)

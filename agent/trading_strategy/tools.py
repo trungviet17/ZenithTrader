@@ -5,59 +5,58 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 
 from dotenv import load_dotenv
 import requests
+import json
 
 load_dotenv()
 
 
 FMP_API_KEY = os.getenv("FMP_API_KEY")
+FN_API_KEY = os.environ.get("FINANCIAL_DATASETS_API_KEY")
 
 
 
-def get_financial_metrics(ticker: str, end_date: str, limit=5) -> Dict[str, Any]:
-  
-    url = f"https://financialmodelingprep.com/stable/key-metrics?symbol={ticker}&apikey={FMP_API_KEY}"
-    try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        if isinstance(data, list):
-            # Filter by end_date and sort by date descending
-            filtered = [
-                item for item in data
-                if "date" in item and item["date"] <= end_date
-            ]
-            filtered.sort(key=lambda x: x["date"], reverse=True)
-            return {"metrics": filtered[:limit]}
-        else:
-            return {"error": "Unexpected API response format", "response": data}
-    except Exception as e:
-        return {"error": str(e)}
+def get_financial_metrics(ticker: str,  period: str = 'ttm', limit=20) -> Dict[str, Any]:
+
+    headers = {}
+    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
+        headers["X-API-KEY"] = api_key
+
+    url = (
+        f'https://api.financialdatasets.ai/financial-metrics'
+        f'?ticker={ticker}'
+        f'&period={period}'
+        f'&limit={limit}'
+    )
+
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+
+    data = response.json()
+    return data
+
+
+def search_line_items( ticker: str, line_items: list[str], end_date: str, period: str = "ttm", limit: int = 10 ) -> Dict[str, Any]:
     
+    headers = {}
+    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
+        headers["X-API-KEY"] = api_key
 
+    url = "https://api.financialdatasets.ai/financials/search/line-items"
 
-def search_line_items(ticker: str, end_date: str, period="ttm", limit=5) -> Dict[str, Any]:
+    body = {
+        "tickers": [ticker],
+        "line_items": line_items,
+        "end_date": end_date,
+        "period": period,
+        "limit": limit,
+    }
+    response = requests.post(url, headers=headers, json=body)
+    if response.status_code != 200:
+        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
+    data = response.json()
 
-    url = f"https://financialmodelingprep.com/stable/balance-sheet-statement?symbol={ticker}&apikey={FMP_API_KEY}"
-
-    try: 
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        if isinstance(data, list):
-            # Filter by end_date and sort by date descending
-            filtered = [
-                item for item in data
-                if "date" in item and item["date"] <= end_date
-            ]
-            filtered.sort(key=lambda x: x["date"], reverse=True)
-            return {"financial_line_items": filtered[:limit]}
-        else:
-            return {"error": "Unexpected API response format", "response": data}
-    
-    except Exception as e:
-        return {"error": str(e)}
-
-
+    return data
 
 
 def analyze_fundamentals(metrics: List) -> Dict[str, Any]:
@@ -70,58 +69,38 @@ def analyze_fundamentals(metrics: List) -> Dict[str, Any]:
     reasoning = []
 
     # Check ROE (Return on Equity)
-    if latest_metrics.get("returnOnEquity") is not None:
-        roe = latest_metrics["returnOnEquity"]
-        if roe > 0.15:  # 15% ROE threshold
-            score += 2
-            reasoning.append(f"Strong ROE of {roe:.1%}")
-        else:
-            reasoning.append(f"Weak ROE of {roe:.1%}")
+    if latest_metrics.get("return_on_equity") and latest_metrics["return_on_equity"] > 0.15:  # 15% ROE threshold
+        score += 2
+        reasoning.append(f"Strong ROE of {latest_metrics['return_on_equity']:.1%}")
+    elif latest_metrics.get("return_on_equity"):
+        reasoning.append(f"Weak ROE of {latest_metrics['return_on_equity']:.1%}")
     else:
         reasoning.append("ROE data not available")
 
     # Check Debt to Equity
-    debt_to_equity = None
-    
-    if "totalDebt" in latest_metrics and "totalEquity" in latest_metrics and latest_metrics["totalEquity"] != 0:
-        debt_to_equity = latest_metrics["totalDebt"] / latest_metrics["totalEquity"]
-    
-    if debt_to_equity is not None:
-        if debt_to_equity < 0.5:
-            score += 2
-            reasoning.append("Conservative debt levels")
-        else:
-            reasoning.append(f"High debt to equity ratio of {debt_to_equity:.1f}")
+    if latest_metrics.get("debt_to_equity") and latest_metrics["debt_to_equity"] < 0.5:
+        score += 2
+        reasoning.append("Conservative debt levels")
+    elif latest_metrics.get("debt_to_equity"):
+        reasoning.append(f"High debt to equity ratio of {latest_metrics['debt_to_equity']:.1f}")
     else:
         reasoning.append("Debt to equity data not available")
 
     # Check Operating Margin
-    operating_margin = None
-    if latest_metrics.get("operatingMargin") is not None:
-        operating_margin = latest_metrics["operatingMargin"]
-    
-    if operating_margin is not None:
-        if operating_margin > 0.15:
-            score += 2
-            reasoning.append("Strong operating margins")
-        else:
-            reasoning.append(f"Weak operating margin of {operating_margin:.1%}")
+    if latest_metrics.get("operating_margin") and latest_metrics["operating_margin"] > 0.15:
+        score += 2
+        reasoning.append("Strong operating margins")
+    elif latest_metrics.get("operating_margin"):
+        reasoning.append(f"Weak operating margin of {latest_metrics['operating_margin']:.1%}")
     else:
         reasoning.append("Operating margin data not available")
 
     # Check Current Ratio
-    current_ratio = None
-    if latest_metrics.get("currentRatio") is not None:
-        current_ratio = latest_metrics["currentRatio"]
-    elif "totalCurrentAssets" in latest_metrics and "totalCurrentLiabilities" in latest_metrics and latest_metrics["totalCurrentLiabilities"] != 0:
-        current_ratio = latest_metrics["totalCurrentAssets"] / latest_metrics["totalCurrentLiabilities"]
-    
-    if current_ratio is not None:
-        if current_ratio > 1.5:
-            score += 1
-            reasoning.append("Good liquidity position")
-        else:
-            reasoning.append(f"Weak liquidity with current ratio of {current_ratio:.1f}")
+    if latest_metrics.get("current_ratio") and latest_metrics["current_ratio"] > 1.5:
+        score += 1
+        reasoning.append("Good liquidity position")
+    elif latest_metrics.get("current_ratio"):
+        reasoning.append(f"Weak liquidity with current ratio of {latest_metrics['current_ratio']:.1f}")
     else:
         reasoning.append("Current ratio data not available")
 
@@ -136,29 +115,9 @@ def analyze_fundamentals(metrics: List) -> Dict[str, Any]:
 
 def analyze_consistency(financial_line_items: List) -> Dict[str, Any]:
     """Analyze earnings consistency and growth."""
-    if not financial_line_items:
-        return {"score": 0, "details": "No financial data provided"}
-    
-    if len(financial_line_items) < 4:  # Less than 4 periods available
-        reasoning = ["Insufficient historical data for complete trend analysis"]
-        score = 0
-        
-        # If at least one period is available, we can still provide some insights
-        if len(financial_line_items) >= 1:
-            latest = financial_line_items[0]
-            
-            # Check if net income is positive in the latest period
-            if latest.get("netIncome") is not None and latest["netIncome"] > 0:
-                score += 1
-                reasoning.append(f"Positive net income of {latest['netIncome']:,.0f} in latest period")
-            elif latest.get("netIncome") is not None:
-                reasoning.append(f"Negative net income of {latest['netIncome']:,.0f} in latest period")
-            else:
-                reasoning.append("Net income data not available")
-                
-        return {"score": score, "details": "; ".join(reasoning)}
-        
-    # Original code continues here for 4+ periods
+    if len(financial_line_items) < 4:  # Need at least 4 periods for trend analysis
+        return {"score": 0, "details": "Insufficient historical data"}
+
     score = 0
     reasoning = []
 
@@ -188,87 +147,44 @@ def analyze_consistency(financial_line_items: List) -> Dict[str, Any]:
 
 
 
+
 def analyze_moat(metrics: List) -> Dict[str, Any]:
-    """
-    Evaluate whether the company likely has a durable competitive advantage (moat).
-    For simplicity, we look at stability of ROE/operating margins over multiple periods
-    or high margin over the last few years. Higher stability => higher moat score.
-    """
-    if not metrics:
-        return {"score": 0, "max_score": 3, "details": "Insufficient fundamental data"}
+    if not metrics or len(metrics) < 3:
+        return {"score": 0, "max_score": 3, "details": "Insufficient data for moat analysis"}
 
     reasoning = []
     moat_score = 0
     historical_roes = []
     historical_margins = []
 
-    # Extract ROE and operating margin from available data
     for m in metrics:
-        # Handle ROE
         if m.get("return_on_equity") is not None:
             historical_roes.append(m["return_on_equity"])
-        elif m.get("returnOnEquity") is not None:
-            historical_roes.append(m["returnOnEquity"])
-        
-        # Handle operating margin
         if m.get("operating_margin") is not None:
             historical_margins.append(m["operating_margin"])
-        elif m.get("operatingMargin") is not None:
-            historical_margins.append(m["operatingMargin"])
-        # If operating margin isn't available, try to calculate it
-        elif "enterpriseValue" in m and "evToSales" in m and "evToEBITDA" in m:
-            try:
-                revenue = m["enterpriseValue"] / m["evToSales"]
-                ebitda = m["enterpriseValue"] / m["evToEBITDA"]
-                # Operating margin is approximately EBITDA / Revenue
-                calculated_margin = ebitda / revenue
-                historical_margins.append(calculated_margin)
-                reasoning.append(f"Operating margin calculated from EV metrics: {calculated_margin:.1%}")
-            except (ZeroDivisionError, TypeError):
-                reasoning.append("Could not calculate operating margin from available data")
 
-    # If limited historical data is available, evaluate based on current values
-    if len(historical_roes) < 3 and len(historical_roes) > 0:
-        latest_roe = historical_roes[0]
-        if latest_roe > 0.15:
-            moat_score += 1
-            reasoning.append(f"Strong current ROE of {latest_roe:.1%} (suggests potential moat)")
-        else:
-            reasoning.append(f"ROE of {latest_roe:.1%} below 15% threshold")
-    elif len(historical_roes) >= 3:
-        # Original code for 3+ periods of ROE data
+    # Check for stable or improving ROE
+    if len(historical_roes) >= 3:
         stable_roe = all(r > 0.15 for r in historical_roes)
         if stable_roe:
             moat_score += 1
             reasoning.append("Stable ROE above 15% across periods (suggests moat)")
         else:
             reasoning.append("ROE not consistently above 15%")
-    else:
-        reasoning.append("No ROE data available")
 
-    # Similar adjustment for operating margin
-    if len(historical_margins) < 3 and len(historical_margins) > 0:
-        latest_margin = historical_margins[0]
-        if latest_margin > 0.15:
-            moat_score += 1
-            reasoning.append(f"Strong current operating margin of {latest_margin:.1%} (moat indicator)")
-        else:
-            reasoning.append(f"Operating margin of {latest_margin:.1%} below 15% threshold")
-    elif len(historical_margins) >= 3:
-        # Original code for 3+ periods of margin data
+    # Check for stable or improving operating margin
+    if len(historical_margins) >= 3:
         stable_margin = all(m > 0.15 for m in historical_margins)
         if stable_margin:
             moat_score += 1
             reasoning.append("Stable operating margins above 15% (moat indicator)")
         else:
             reasoning.append("Operating margin not consistently above 15%")
-    else:
-        reasoning.append("No operating margin data available")
 
-    # If both are strong, add an extra point
+    # If both are stable/improving, add an extra point
     if moat_score == 2:
         moat_score += 1
-        reasoning.append("Both ROE and margin strength indicate a solid moat")
+        reasoning.append("Both ROE and margin stability indicate a solid moat")
 
     return {
         "score": moat_score,
@@ -276,11 +192,7 @@ def analyze_moat(metrics: List) -> Dict[str, Any]:
         "details": "; ".join(reasoning),
     }
 
-
 def analyze_management_quality(financial_line_items: List) -> Dict[str, Any]:
-    """
-    Checks for share dilution or consistent buybacks, and some dividend track record.
-    """
     if not financial_line_items:
         return {"score": 0, "max_score": 2, "details": "Insufficient data for management analysis"}
 
@@ -288,45 +200,23 @@ def analyze_management_quality(financial_line_items: List) -> Dict[str, Any]:
     mgmt_score = 0
 
     latest = financial_line_items[0]
-    
-    # Check for share buybacks/dilution data
-    if latest.get("issuance_or_purchase_of_equity_shares") is not None:
-        if latest["issuance_or_purchase_of_equity_shares"] < 0:
-            # Negative means the company spent money on buybacks
-            mgmt_score += 1
-            reasoning.append("Company has been repurchasing shares (shareholder-friendly)")
-        elif latest["issuance_or_purchase_of_equity_shares"] > 0:
-            reasoning.append("Recent common stock issuance (potential dilution)")
-    else:
-        # Alternative check using treasury stock or retained earnings if available
-        if latest.get("treasuryStock") is not None and latest["treasuryStock"] > 0:
-            mgmt_score += 1
-            reasoning.append("Presence of treasury stock suggests share repurchases")
-        elif latest.get("retainedEarnings") is not None:
-            # Negative retained earnings might indicate aggressive buybacks
-            if latest["retainedEarnings"] < 0 and latest.get("totalEquity", 0) > 0:
-                mgmt_score += 1
-                reasoning.append("Negative retained earnings with positive equity may indicate share repurchases")
-            else:
-                reasoning.append("No clear evidence of share repurchase program")
-        else:
-            reasoning.append("Insufficient data to evaluate share issuance/buybacks")
+    if latest.get("issuance_or_purchase_of_equity_shares") and latest["issuance_or_purchase_of_equity_shares"] < 0:
+        # Negative means the company spent money on buybacks
+        mgmt_score += 1
+        reasoning.append("Company has been repurchasing shares (shareholder-friendly)")
 
-    # Check for dividend data
-    if latest.get("dividends_and_other_cash_distributions") is not None:
-        if latest["dividends_and_other_cash_distributions"] < 0:
-            mgmt_score += 1
-            reasoning.append("Company has a track record of paying dividends")
+    if latest.get("issuance_or_purchase_of_equity_shares") and latest["issuance_or_purchase_of_equity_shares"] > 0:
+        # Positive issuance means new shares => possible dilution
+        reasoning.append("Recent common stock issuance (potential dilution)")
     else:
-        # Try to infer dividend policy from other metrics
-        if latest.get("earningsYield") is not None and latest.get("freeCashFlowYield") is not None:
-            # Significant difference might indicate dividend payments
-            if latest["earningsYield"] > 0 and latest["freeCashFlowYield"] > 0:
-                mgmt_score += 0.5  # Partial score as this is inference
-                reasoning.append("Positive earnings and free cash flow yield suggest potential for dividends")
-        
-        # Add information about limitations
-        reasoning.append("Direct dividend data not available")
+        reasoning.append("No significant new stock issuance detected")
+
+    # Check for any dividends
+    if latest.get("dividends_and_other_cash_distributions") and latest["dividends_and_other_cash_distributions"] < 0:
+        mgmt_score += 1
+        reasoning.append("Company has a track record of paying dividends")
+    else:
+        reasoning.append("No or minimal dividends paid")
 
     return {
         "score": mgmt_score,
@@ -334,10 +224,7 @@ def analyze_management_quality(financial_line_items: List) -> Dict[str, Any]:
         "details": "; ".join(reasoning),
     }
 
-
 def calculate_owner_earnings(financial_line_items: List) -> Dict[str, Any]:
-    """Calculate owner earnings (Buffett's preferred measure of true earnings power).
-    Owner Earnings = Net Income + Depreciation - Maintenance CapEx"""
     if not financial_line_items or len(financial_line_items) < 1:
         return {"owner_earnings": None, "details": ["Insufficient data for owner earnings calculation"]}
 
@@ -362,7 +249,6 @@ def calculate_owner_earnings(financial_line_items: List) -> Dict[str, Any]:
 
 
 def calculate_intrinsic_value(financial_line_items: List) -> Dict[str, Any]:
-    """Calculate intrinsic value using DCF with owner earnings."""
     if not financial_line_items:
         return {"intrinsic_value": None, "details": ["Insufficient data for valuation"]}
 
@@ -409,3 +295,25 @@ def calculate_intrinsic_value(financial_line_items: List) -> Dict[str, Any]:
         },
         "details": ["Intrinsic value calculated using DCF model with owner earnings"],
     }
+
+
+if __name__ == "__main__":
+    # Example usage
+    ticker = "AAPL"
+    end_date = "2025-05-05"
+    metrics = get_financial_metrics(ticker)
+
+  
+    line_items = [
+        "capital_expenditure",
+        "depreciation_and_amortization",
+        "net_income",
+        "outstanding_shares",
+        "total_assets",
+        "total_liabilities",
+        "dividends_and_other_cash_distributions",
+        "issuance_or_purchase_of_equity_shares",
+    ]
+
+    financial_line_items = search_line_items(ticker, line_items, end_date)
+  

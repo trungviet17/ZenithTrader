@@ -34,4 +34,4 @@ def get_buffett_prompt(ticker: str, analysis_data: str, signal: str) -> PromptTe
     return PromptTemplate(
         input_variables=["ticker", "analysis_data", "signal"],
         template=prompt,
-    )
+    ).format(ticker=ticker, analysis_data=analysis_data, signal=signal)

@@ -15,7 +15,7 @@ class BuffettState(BaseModel):
 
     # fetch data 
     metrics: Optional[List[Dict]] = None
-    financial_line_items: Optional[Dict] = None
+    financial_line_items: Optional[List[Dict]] = None
     market_cap: Optional[float] = None
 
     # analysis 

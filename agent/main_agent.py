@@ -1,5 +1,5 @@
 from agent.market_intelligence.graph import create_graph, create_sample_vectorstore
-from server.schema import AssetData
+from agent.trading_strategy.agents.buffett import create_buffett_agent
 
 
 
@@ -14,4 +14,4 @@ from server.schema import AssetData
 # ))
 
 
-graph = create_graph()
+graph = create_buffett_agent()
