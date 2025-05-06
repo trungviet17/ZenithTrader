@@ -35,9 +35,9 @@ def calculate_momentum(df: pd.DataFrame) -> pd.DataFrame:
     df['RSI'] = 100 - (100 / (1 + rs))
 
     # macd 
-    df['MACD'] = df['EMA_12'] - df['EMA_26']
-    df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean()
-    df['MACD_Histogram'] = df['MACD'] - df['Signal_Line']
+    df['MACD_Line'] = df['EMA_12'] - df['EMA_26']
+    df['Signal_Line'] = df['MACD_Line'].ewm(span=9, adjust=False).mean()
+    df['MACD_Histogram'] = df['MACD_Line'] - df['Signal_Line']
 
 
     window = 14 
@@ -395,4 +395,5 @@ def analyze_momentum(df: pd.DataFrame) -> Dict[str, Any]:
     }
 
 
- 
+
+

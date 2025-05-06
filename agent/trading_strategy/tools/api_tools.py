@@ -1,3 +1,4 @@
+import datetime
 from typing import Dict, Any
 import sys, os 
 
@@ -59,9 +60,10 @@ def search_line_items( ticker: str, line_items: list[str], end_date: str, period
     return data
 
 
-def get_history_price(ticker: str, period: str = "1y", interval : str = "1d") -> pd.DataFrame: 
+def get_history_price(ticker: str, end_date: str, start_date: str,  interval : str = "day") -> pd.DataFrame: 
 
     header = {}
+    interval_multiplier = 1
     if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
         header["X-API-KEY"] = api_key
 
@@ -69,9 +71,12 @@ def get_history_price(ticker: str, period: str = "1y", interval : str = "1d") ->
         url = (
             f'https://api.financialdatasets.ai/prices/'
             f'?ticker={ticker}'
-            f'&interval={interval}'
-            f'&period={period}'
+            f'&interval={interval}' 
+            f'&interval_multiplier={interval_multiplier}'
+            f'&start_date={start_date}'
+            f'&end_date={end_date}'
         )
+        print(f"Fetching data from {url}")
         response = requests.get(url, headers=header)
 
         if response.status_code != 200:
@@ -80,7 +85,8 @@ def get_history_price(ticker: str, period: str = "1y", interval : str = "1d") ->
         price_data = response.json()
 
         df = pd.DataFrame(price_data['prices'])
-        df['time'] = pd.to_datetime(df['time'], unit='s')
+        # Check if the time is already in string format (like ISO format)
+        df['time'] = pd.to_datetime(df['time'])
         df.set_index('time', inplace=True)
 
 
@@ -90,3 +96,13 @@ def get_history_price(ticker: str, period: str = "1y", interval : str = "1d") ->
         print(f"Error fetching data: {ticker} - {e}")
         return pd.DataFrame()
 
+
+
+if __name__ == '__main__': 
+    ticker = "AAPL"
+    end_date = datetime.datetime.now().strftime("%Y-%m-%d")
+    start_date = (datetime.datetime.now() - datetime.timedelta(days = 100)).strftime("%Y-%m-%d")
+    interval = "day"
+    df = get_history_price(ticker, end_date, start_date, interval)
+    
+    print(df.head())

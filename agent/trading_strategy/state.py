@@ -39,6 +39,37 @@ class BuffettState(BaseModel):
 
 
 
+class MurphyState(BaseModel):
+    # input 
+    ticker: str
+    end_date: Optional[str] = None
+    interval: Optional[str] = "day"  # "1d", "1h", etc.
+
+    # fetch data 
+    price_history: Optional[Dict] = None  
+    technical_data: Optional[Dict] = None 
+
+    # analysis 
+    price_df : Optional[List[Dict]] = None
+    trend_analysis: Optional[Dict] = None
+    support_resistance: Optional[Dict] = None
+    momentum_analysis: Optional[Dict] = None
+    volume_analysis: Optional[Dict] = None
+    pattern_analysis: Optional[Dict] = None
+    total_score: Optional[float] = None
+    max_score: Optional[float] = None
+
+    # output
+    error: Optional[str] = None
+    output_signal: Optional[TradingSignal] = None
+
+    # tracking 
+    current_step: str = "initialize"
+    messages: List[Dict] = Field(default_factory=list)
+
+
+
+
 
 
 
