@@ -68,8 +68,64 @@ class MurphyState(BaseModel):
     messages: List[Dict] = Field(default_factory=list)
 
 
+class GrahamState(BaseModel):
+    # input 
+    ticker: str
+    end_date: Optional[str] = None
+
+    # fetch data 
+    metrics: Optional[List[Dict]] = None
+    financial_line_items: Optional[List[Dict]] = None
+    market_cap: Optional[float] = None
+    balance_sheet: Optional[List[Dict]] = None
+
+    # analysis 
+    value_analysis: Optional[Dict] = None
+    safety_analysis: Optional[Dict] = None
+    financial_strength_analysis: Optional[Dict] = None
+    earnings_stability_analysis: Optional[Dict] = None
+    intrinsic_value: Optional[float] = None
+    margin_of_safety: Optional[float] = None
+    total_score: Optional[float] = None
+    max_score: Optional[float] = None
+
+    # output
+    error: Optional[str] = None
+    output_signal: Optional[TradingSignal] = None
+
+    # tracking 
+    current_step: str = "initialize"
+    messages: List[Dict] = Field(default_factory=list)
 
 
+
+class LynchState(BaseModel):
+    # input 
+    ticker: str
+    end_date: Optional[str] = None
+
+    # fetch data 
+    metrics: Optional[List[Dict]] = None
+    financial_line_items: Optional[List[Dict]] = None
+    market_cap: Optional[float] = None
+    industry_data: Optional[Dict] = None
+
+    # analysis 
+    growth_analysis: Optional[Dict] = None
+    peg_analysis: Optional[Dict] = None
+    business_category: Optional[str] = None  # Fast grower, stalwart, etc.
+    institutional_ownership: Optional[float] = None
+    competitive_advantage: Optional[Dict] = None
+    total_score: Optional[float] = None
+    max_score: Optional[float] = None
+
+    # output
+    error: Optional[str] = None
+    output_signal: Optional[TradingSignal] = None
+
+    # tracking 
+    current_step: str = "initialize"
+    messages: List[Dict] = Field(default_factory=list)
 
 
 

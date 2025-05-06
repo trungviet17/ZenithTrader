@@ -1,7 +1,8 @@
 from agent.market_intelligence.graph import create_graph, create_sample_vectorstore
 from agent.trading_strategy.agents.buffett import create_buffett_agent
 from agent.trading_strategy.agents.murphy import create_murphy_agent
-
+from agent.trading_strategy.agents.graham import create_graham_agent
+from agent.trading_strategy.agents.lynch import create_lynch_agent
 
 
 # vectorstore = create_sample_vectorstore(AssetData(
@@ -15,4 +16,4 @@ from agent.trading_strategy.agents.murphy import create_murphy_agent
 # ))
 
 
-graph = create_murphy_agent()
+graph = create_lynch_agent()
