@@ -1,62 +1,12 @@
 from typing import Dict, List, Any
 import sys, os 
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 
 from dotenv import load_dotenv
-import requests
-import json
+
 
 load_dotenv()
-
-
-FMP_API_KEY = os.getenv("FMP_API_KEY")
-FN_API_KEY = os.environ.get("FINANCIAL_DATASETS_API_KEY")
-
-
-
-def get_financial_metrics(ticker: str,  period: str = 'ttm', limit=20) -> Dict[str, Any]:
-
-    headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
-        headers["X-API-KEY"] = api_key
-
-    url = (
-        f'https://api.financialdatasets.ai/financial-metrics'
-        f'?ticker={ticker}'
-        f'&period={period}'
-        f'&limit={limit}'
-    )
-
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
-
-    data = response.json()
-    return data
-
-
-def search_line_items( ticker: str, line_items: list[str], end_date: str, period: str = "ttm", limit: int = 10 ) -> Dict[str, Any]:
-    
-    headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
-        headers["X-API-KEY"] = api_key
-
-    url = "https://api.financialdatasets.ai/financials/search/line-items"
-
-    body = {
-        "tickers": [ticker],
-        "line_items": line_items,
-        "end_date": end_date,
-        "period": period,
-        "limit": limit,
-    }
-    response = requests.post(url, headers=headers, json=body)
-    if response.status_code != 200:
-        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
-    data = response.json()
-
-    return data
 
 
 def analyze_fundamentals(metrics: List) -> Dict[str, Any]:
@@ -110,9 +60,6 @@ def analyze_fundamentals(metrics: List) -> Dict[str, Any]:
         "metrics": latest_metrics
     }
 
-
-
-
 def analyze_consistency(financial_line_items: List) -> Dict[str, Any]:
     """Analyze earnings consistency and growth."""
     if len(financial_line_items) < 4:  # Need at least 4 periods for trend analysis
@@ -144,9 +91,6 @@ def analyze_consistency(financial_line_items: List) -> Dict[str, Any]:
         "score": score,
         "details": "; ".join(reasoning),
     }
-
-
-
 
 def analyze_moat(metrics: List) -> Dict[str, Any]:
     if not metrics or len(metrics) < 3:
@@ -247,7 +191,6 @@ def calculate_owner_earnings(financial_line_items: List) -> Dict[str, Any]:
         "details": ["Owner earnings calculated successfully"],
     }
 
-
 def calculate_intrinsic_value(financial_line_items: List) -> Dict[str, Any]:
     if not financial_line_items:
         return {"intrinsic_value": None, "details": ["Insufficient data for valuation"]}
@@ -297,23 +240,3 @@ def calculate_intrinsic_value(financial_line_items: List) -> Dict[str, Any]:
     }
 
 
-if __name__ == "__main__":
-    # Example usage
-    ticker = "AAPL"
-    end_date = "2025-05-05"
-    metrics = get_financial_metrics(ticker)
-
-  
-    line_items = [
-        "capital_expenditure",
-        "depreciation_and_amortization",
-        "net_income",
-        "outstanding_shares",
-        "total_assets",
-        "total_liabilities",
-        "dividends_and_other_cash_distributions",
-        "issuance_or_purchase_of_equity_shares",
-    ]
-
-    financial_line_items = search_line_items(ticker, line_items, end_date)
-  

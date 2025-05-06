@@ -4,7 +4,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 from agent.trading_strategy.state import BuffettState, TradingSignal
 from typing import Dict
 from datetime import datetime
-from agent.trading_strategy.tools import analyze_consistency, analyze_fundamentals, analyze_management_quality, analyze_moat, calculate_intrinsic_value, get_financial_metrics, search_line_items
+from agent.trading_strategy.tools.buffett_tools import analyze_consistency, analyze_fundamentals, analyze_management_quality, analyze_moat, calculate_intrinsic_value
+from agent.trading_strategy.tools.api_tools import get_financial_metrics, search_line_items
 from agent.trading_strategy.helper import TradingSignalParser
 
 # LangGraph imports
@@ -311,16 +312,11 @@ def handle_error(buffett_state: BuffettState) -> BuffettState:
 ## RUN WORKFLOW + ROUTER
 # Router function to determine next step
 def router(buffett_state: BuffettState) -> str:
-    """Determines the next node in the graph based on current state."""
 
-    
     if buffett_state.error:
         return "error_handler"
     
     return buffett_state.current_step
-
-
-
 
 
 # Create Warren Buffett agent graph
