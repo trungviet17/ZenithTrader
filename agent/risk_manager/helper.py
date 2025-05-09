@@ -26,7 +26,8 @@ class RiskManagerParser(BaseOutputParser):
                 price=data.get("price", 0.0),
                 reasoning=data.get("reasoning", ""),
                 confidence=float(data.get("confidence", 0.0)),
-                agent_name="RiskManager"
+                agent_name="RiskManager", 
+                exchange_name=data.get("exchange_name", "")
             )
 
             risk_manager_out = RiskManagerOut(

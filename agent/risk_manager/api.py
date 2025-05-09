@@ -93,7 +93,7 @@ def get_liquidity_data(ticker: str, period: str = '3mo', interval: str = '1d') -
 
 def get_counterparty_data(exchange: str) -> Dict[str, Any]:
 
-    with open("counter_party.json") as f:
+    with open("agent/risk_manager/counter_party.json") as f:
         data = json.load(f)
 
     

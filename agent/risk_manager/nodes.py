@@ -2,6 +2,7 @@ import sys, os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agent.risk_manager.state import TradeDecision, RiskLevel, RiskFactor, RiskAssessment, RiskProfile, RiskManagerState
+from agent.risk_manager.api import get_concentration_data, get_liquidity_data, get_counterparty_data, get_volatility_data
 from typing import Dict, Any
 
 from agent.risk_manager.prompt import get_risk_reduction_prompt
@@ -21,6 +22,8 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 def initialize_state(state: RiskManagerState) -> RiskManagerState:
     trade_decision = state.trade_decision
 
+
+    
     if trade_decision.symbol == "":
         raise ValueError("Symbol is required.")
 
@@ -33,6 +36,16 @@ def initialize_state(state: RiskManagerState) -> RiskManagerState:
     if trade_decision.price <= 0:
         raise ValueError("Price must be greater than 0.")
 
+    # generate sample data for testing 
+    if trade_decision.exchange_name == "" or trade_decision.exchange_name is None:
+        trade_decision.exchange_name = "NASDAQ"
+
+    if state.holding is None:
+        state.holding = {
+            "AAPL" : 10, 
+            "MSFT" : 5,
+            "GOOGL" : 2
+        }
 
     state.message.append("Passed initial validation checks.")
     state.next_step = "assess_risk"
@@ -42,24 +55,14 @@ def initialize_state(state: RiskManagerState) -> RiskManagerState:
 def assess_risk(state: RiskManagerState) -> RiskManagerState: 
 
     trade_decision = state.trade_decision
-
-
-    if trade_decision.symbol == "":
-        raise ValueError("Symbol is required.")
-
-    if trade_decision.action not in ["buy", "sell", "hold"]:
-        raise ValueError(f"Invalid action: {trade_decision.action}. Must be 'buy', 'sell', or 'hold'.")
-
-    if trade_decision.quantity <= 0:
-        raise ValueError("Quantity must be greater than 0.")
     
-    if trade_decision.price <= 0:
-        raise ValueError("Price must be greater than 0.")
-
-    state.message.append("Passed initial validation checks.")
+    vol_data = get_volatility_data(trade_decision.symbol)
+    li_data = get_liquidity_data(trade_decision.symbol)
+    cp_data = get_counterparty_data(trade_decision.exchange_name)
+    conc_data = get_concentration_data(state.holding)
 
     try : 
-        risk_profile = compile_risk_profile(trade_decision)
+        risk_profile = compile_risk_profile(trade_decision, vol_data, li_data, cp_data, conc_data)
 
         state.risk_profile = risk_profile
         state.message.append("Risk profile compiled successfully.")
@@ -80,7 +83,7 @@ def create_mitigation_plan(state: RiskManagerState) -> RiskManagerState:
         raise ValueError("Risk profile is required to create a mitigation plan.")
 
     try:
-        mitigation_plan = generate_mitigation_plan(state)
+        mitigation_plan = generate_mitigation_plan(state.trade_decision, state.risk_profile)
         state.mitigation_plan = mitigation_plan
         state.next_step = "generate_final_decision"
         state.message.append("Mitigation plan created successfully.")
@@ -140,28 +143,39 @@ def create_risk_manager_agent():
     workflow.add_node("assess_risk", assess_risk)
     workflow.add_node("create_mitigation_plan", create_mitigation_plan)
     workflow.add_node("generate_final_decision", generate_final_decision)
-    workflow.add_node("error_handler", error_handler)
+    # workflow.add_node("error_handler", error_handler)
 
     workflow.add_edge("initialize_state", "assess_risk")
     workflow.add_edge("generate_final_decision", END)
+    workflow.add_edge("assess_risk", "create_mitigation_plan")
+    workflow.add_edge("create_mitigation_plan", "generate_final_decision")
+    
+    # workflow.add_conditional_edges(
+    #    "assess_risk",
+    #    router, 
+    #    {
+    #        "create_mitigation_plan": "create_mitigation_plan",
+    #        "error_handler": "error_handler"
+    #    }
+    # )
 
-    workflow.add_conditional_edges(
-       "assess_risk",
-       router, 
-       {
-           "create_mitigation_plan": "create_mitigation_plan",
-           "error_handler": "error_handler"
-       }
-    )
+    # workflow.add_conditional_edges(
+    #     "create_mitigation_plan",
+    #     router,
+    #     {
+    #         "generate_final_decision": "generate_final_decision",
+    #         "error_handler": "error_handler"
+    #     }
+    # )
 
-    workflow.add_conditional_edges(
-        "create_mitigation_plan",
-        router,
-        {
-            "generate_final_decision": "generate_final_decision",
-            "error_handler": "error_handler"
-        }
-    )
+    # workflow.add_conditional_edges(
+    #     "generate_final_decision",
+    #     router,
+    #     {
+    #         "error_handler": "error_handler"
+    #     }
+    
+
     workflow.set_entry_point("initialize_state")
     return workflow.compile()
 

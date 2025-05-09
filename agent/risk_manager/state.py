@@ -13,7 +13,7 @@ class TradeDecision(BaseModel):
     reasoning : str = Field(default="")
     agent_name : str = "RiskManager"
     confidence : float = Field(gt=0, le=1, default=0.5)
-
+    exchange_name : str = Field(default="")
 
 
 class RiskLevel(str, Enum):
@@ -47,13 +47,13 @@ class RiskProfile(BaseModel):
 class RiskManagerState(BaseModel): 
 
     trade_decision: TradeDecision
-    risk_profile: Optional[RiskProfile]
-    mitigation_plan: Optional[Dict]
-    human_input_required: bool
-    approval_status: Optional[str]
-    reasoning: Optional[str]
-    next_step: str
-    message: Optional[List[str]] = None
+    holding: Optional[Dict[str, int]] = None
+    risk_profile: Optional[RiskProfile] = None
+    mitigation_plan: Optional[Dict[str, float]] = None
+    approval_status: Optional[str] = None
+    reasoning: Optional[str] = None
+    next_step: str = Field(default="initialize_state")
+    message: Optional[List[str]] = []
 
 
 class RiskManagerOut(BaseModel): 

@@ -9,7 +9,7 @@ risk_reduction_prompt = """
 
         ```
         Trading Decision:
-        - Asset Symbol: {trade_decision.asset_symbol}
+        - Asset Symbol: {trade_decision.symbol}
         - Action: {trade_decision.action}
         - Quantity: {trade_decision.quantity}
         - Price: ${trade_decision.price}
@@ -19,8 +19,8 @@ risk_reduction_prompt = """
         Risk Profile:
         {risk_profile}
 
-        Market Conditions:
-        {market_conditions}
+        Mitigation Plan:
+        {mitigation_plan}   
         ```
 
         ### YOUR TASK:
@@ -46,6 +46,7 @@ risk_reduction_prompt = """
                 "quantity": "Possibly modified quantity or original quantity if unchanged",
                 "price": "Possibly modified price or original price if unchanged",
                 "reasoning": "New reasoning for optimized decision",
+                "exchange_name": "Exchange name",
                 "confidence": "Confidence score (0-1) indicating how much you agree with the original decision",
                 "risk_profile": "Risk profile summary",
                 "adjustment_reasoning": "Detailed explanation of why these changes were made, how they reduce risk, and how they maintain aspects of the original investment thesis"
