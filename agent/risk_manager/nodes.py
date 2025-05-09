@@ -143,37 +143,38 @@ def create_risk_manager_agent():
     workflow.add_node("assess_risk", assess_risk)
     workflow.add_node("create_mitigation_plan", create_mitigation_plan)
     workflow.add_node("generate_final_decision", generate_final_decision)
-    # workflow.add_node("error_handler", error_handler)
+    workflow.add_node("error_handler", error_handler)
 
     workflow.add_edge("initialize_state", "assess_risk")
     workflow.add_edge("generate_final_decision", END)
-    workflow.add_edge("assess_risk", "create_mitigation_plan")
-    workflow.add_edge("create_mitigation_plan", "generate_final_decision")
+    # workflow.add_edge("assess_risk", "create_mitigation_plan")
+    # workflow.add_edge("create_mitigation_plan", "generate_final_decision")
     
-    # workflow.add_conditional_edges(
-    #    "assess_risk",
-    #    router, 
-    #    {
-    #        "create_mitigation_plan": "create_mitigation_plan",
-    #        "error_handler": "error_handler"
-    #    }
-    # )
+    workflow.add_conditional_edges(
+       "assess_risk",
+       router, 
+       {
+           "create_mitigation_plan": "create_mitigation_plan",
+           "error_handler": "error_handler"
+       }
+    )
 
-    # workflow.add_conditional_edges(
-    #     "create_mitigation_plan",
-    #     router,
-    #     {
-    #         "generate_final_decision": "generate_final_decision",
-    #         "error_handler": "error_handler"
-    #     }
-    # )
+    workflow.add_conditional_edges(
+        "create_mitigation_plan",
+        router,
+        {
+            "generate_final_decision": "generate_final_decision",
+            "error_handler": "error_handler"
+        }
+    )
 
-    # workflow.add_conditional_edges(
-    #     "generate_final_decision",
-    #     router,
-    #     {
-    #         "error_handler": "error_handler"
-    #     }
+    workflow.add_conditional_edges(
+        "generate_final_decision",
+        router,
+        {
+            "error_handler": "error_handler"
+        }
+    )
     
 
     workflow.set_entry_point("initialize_state")
