@@ -8,8 +8,8 @@ import sys, os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))    
 
 
-def get_volaility_data(ticker: str, period: str = '3mo', interval: str = '1d') -> Dict[str, Any]:
-    
+def get_volatility_data(ticker: str, period: str = '3mo', interval: str = '1d') -> Dict[str, Any]:
+
     try:
         # Tải dữ liệu lịch sử của tài sản
         asset = yf.Ticker(ticker)
@@ -53,7 +53,7 @@ def get_volaility_data(ticker: str, period: str = '3mo', interval: str = '1d') -
 
 
 
-def get_liguidity_data(ticker: str, period: str = '3mo', interval: str = '1d') -> Dict[str, Any]:
+def get_liquidity_data(ticker: str, period: str = '3mo', interval: str = '1d') -> Dict[str, Any]:
 
     try:
         # Tải dữ liệu lịch sử của tài sản
@@ -91,13 +91,13 @@ def get_liguidity_data(ticker: str, period: str = '3mo', interval: str = '1d') -
         return None
     
 
-def get_counterparty_data(ticker: str) -> Dict[str, Any]:
+def get_counterparty_data(exchange: str) -> Dict[str, Any]:
 
-    with open("agent/risk_manager/counter_party.json") as f:
+    with open("counter_party.json") as f:
         data = json.load(f)
 
     
-    return data.get(ticker, None)
+    return data.get(exchange, None)
 
 
 def get_concentration_data(holdings: Dict[str, int]) -> Dict[str, Any]:
@@ -180,7 +180,7 @@ if __name__ == "__main__":
     ticker = "AAPL"
     period = "3mo"
 
-    res = get_liguidity_data(ticker, period)
+    res = get_liquidity_data(ticker, period)
 
     print(res)
 

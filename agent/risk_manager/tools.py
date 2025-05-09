@@ -5,7 +5,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 from agent.risk_manager.state import TradeDecision, RiskProfile, RiskAssessment, RiskLevel, RiskFactor
 import numpy as np
 from typing import Dict, Any
-from agent.risk_manager.api import get_volaility_data, get_liguidity_data, get_counterparty_data, get_concentration_data
+from agent.risk_manager.api import get_volatility_data, get_liquidity_data, get_counterparty_data, get_concentration_data
 
 def assess_market_volatility(trade_decision: TradeDecision, market_data: Dict[str, Any]) -> RiskAssessment:
     """Assess the risk related to market volatility for a given trade decision."""
@@ -247,7 +247,7 @@ def assess_liquidity_risk(trade_decision: TradeDecision, market_data: Dict[str, 
 def assess_counterparty_risk(trade_decision: TradeDecision, exchange_data: Dict[str, Any]) -> RiskAssessment:
     """Assess counterparty risk for a given trade decision."""
 
-    exchange_name = exchange_data.get('exchange_name', 'Unknown')
+    exchange_name = exchange_data.get('symbol', 'Unknown')
     is_regulated = exchange_data.get('is_regulated', False)
     jurisdiction = exchange_data.get('jurisdiction', 'Unknown')
     insurance_coverage = exchange_data.get('insurance_coverage', 0)
@@ -361,7 +361,7 @@ def assess_concentration_risk(trade_decision: TradeDecision, portfolio_data: Dic
     correlations = portfolio_data.get('correlations', {})
 
 
-    asset_symbol = trade_decision.asset_symbol
+    asset_symbol = trade_decision.symbol
     trade_value = trade_decision.quantity * trade_decision.price
     asset_sector = portfolio_data.get('asset_sector', {}).get(asset_symbol, 'Unknown')
 
@@ -516,7 +516,7 @@ def compile_risk_profile(trade_decision: TradeDecision, vol_market_data, lig_mar
         all_recommendations.extend(assessment.mitigation_suggestions)
     
     # Create summary
-    summary = f"Overall risk assessment for {trade_decision.action.upper()} {trade_decision.quantity} {trade_decision.asset_symbol} " \
+    summary = f"Overall risk assessment for {trade_decision.action.upper()} {trade_decision.quantity} {trade_decision.symbol} " \
               f"at ${trade_decision.price}: {overall_risk.name} risk level."
     
     return RiskProfile(
@@ -529,7 +529,9 @@ def compile_risk_profile(trade_decision: TradeDecision, vol_market_data, lig_mar
 
 if __name__ == "__main__":
 
-    tickers = ["AAPL", "MSFT", "GOOGL"]
+    from pprint import pprint
+
+    ticker = "AAPL" 
 
     holdings = {
         "AAPL": 10,
@@ -537,10 +539,10 @@ if __name__ == "__main__":
         "GOOGL": 8
     }
 
-    vol_data = get_volaility_data(tickers)
-    liq_data = get_liguidity_data(tickers)
+    vol_data = get_volatility_data(ticker)
+    liq_data = get_liquidity_data(ticker)
 
-    counterparty_data = get_counterparty_data("AAPL")
+    counterparty_data = get_counterparty_data("NASDAQ")
     concentration_data = get_concentration_data(holdings)
 
 
@@ -549,11 +551,10 @@ if __name__ == "__main__":
     print("Counterparty Data: ", counterparty_data)
     print("Concentration Data: ", concentration_data)
 
-
-
-    print("Risk Profile: ", compile_risk_profile(
+    
+    pprint(compile_risk_profile(
         TradeDecision(
-            asset_symbol="AAPL",
+            symbol="AAPL",
             action="buy",
             quantity=10,
             price=150.0
