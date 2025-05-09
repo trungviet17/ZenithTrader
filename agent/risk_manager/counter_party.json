@@ -1,0 +1,37 @@
+{
+    "NASDAQ": {
+        "is_regulated": true,
+        "jurisdiction": "USA - SEC",
+        "insurance_coverage": 500000.0,  
+        "credit_rating": "AA+",
+        "security_incidents": []
+    },
+    "NYSE": {
+        "is_regulated": true,
+        "jurisdiction": "USA - SEC",
+        "insurance_coverage": 500000.0,
+        "credit_rating": "AA+",
+        "security_incidents": []
+    },
+    "Binance": {
+        "is_regulated": false,
+        "jurisdiction": "Global (varies by region)",
+        "insurance_coverage": 0.0,
+        "credit_rating": "N/A",
+        "security_incidents": ["2019 - $40M BTC hack"]
+    },
+    "Coinbase": {
+        "is_regulated": true,
+        "jurisdiction": "USA - FinCEN, SEC",
+        "insurance_coverage": 250000.0,
+        "credit_rating": "BBB",
+        "security_incidents": ["2021 - phishing attack, no funds lost"]
+    },
+    "Interactive Brokers": {
+        "is_regulated": true,
+        "jurisdiction": "USA - SEC/CFTC",
+        "insurance_coverage": 500000.0,
+        "credit_rating": "A+",
+        "security_incidents": []
+    }
+}
