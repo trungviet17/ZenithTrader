@@ -5,6 +5,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 from agent.risk_manager.state import TradeDecision, RiskProfile, RiskAssessment, RiskLevel, RiskFactor
 import numpy as np
 from typing import Dict, Any
+from agent.risk_manager.api import get_volaility_data, get_liguidity_data, get_counterparty_data, get_concentration_data
 
 def assess_market_volatility(trade_decision: TradeDecision, market_data: Dict[str, Any]) -> RiskAssessment:
     """Assess the risk related to market volatility for a given trade decision."""
@@ -490,11 +491,11 @@ def assess_concentration_risk(trade_decision: TradeDecision, portfolio_data: Dic
     )
 
 
-def compile_risk_profile(trade_decision: TradeDecision, market_data, portfolio_data: Dict[str, Any], exchange_data: Dict[str, Any]) -> RiskProfile:
+def compile_risk_profile(trade_decision: TradeDecision, vol_market_data, lig_market_data ,  portfolio_data: Dict[str, Any], exchange_data: Dict[str, Any]) -> RiskProfile:
    
     factor_assessments = {
-        RiskFactor.MARKET_VOLATILITY: assess_market_volatility(trade_decision, market_data),
-        RiskFactor.LIQUIDITY: assess_liquidity_risk(trade_decision, market_data),
+        RiskFactor.MARKET_VOLATILITY: assess_market_volatility(trade_decision, vol_market_data),
+        RiskFactor.LIQUIDITY: assess_liquidity_risk(trade_decision, lig_market_data),
         RiskFactor.COUNTERPARTY: assess_counterparty_risk(trade_decision, exchange_data),
         RiskFactor.CONCENTRATION: assess_concentration_risk(trade_decision, portfolio_data),
     }
@@ -524,3 +525,41 @@ def compile_risk_profile(trade_decision: TradeDecision, market_data, portfolio_d
         summary=summary,
         recommendations=list(set(all_recommendations))  # Deduplicate recommendations
     )
+
+
+if __name__ == "__main__":
+
+    tickers = ["AAPL", "MSFT", "GOOGL"]
+
+    holdings = {
+        "AAPL": 10,
+        "MSFT": 5,
+        "GOOGL": 8
+    }
+
+    vol_data = get_volaility_data(tickers)
+    liq_data = get_liguidity_data(tickers)
+
+    counterparty_data = get_counterparty_data("AAPL")
+    concentration_data = get_concentration_data(holdings)
+
+
+    print("Volatility Data: ", vol_data)
+    print("Liquidity Data: ", liq_data)
+    print("Counterparty Data: ", counterparty_data)
+    print("Concentration Data: ", concentration_data)
+
+
+
+    print("Risk Profile: ", compile_risk_profile(
+        TradeDecision(
+            asset_symbol="AAPL",
+            action="buy",
+            quantity=10,
+            price=150.0
+        ),
+        vol_data,
+        liq_data,
+        concentration_data,
+        counterparty_data
+    ))
