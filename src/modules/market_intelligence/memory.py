@@ -31,7 +31,7 @@ class FinancialDataCrawler:
     
     def __init__(
         self,
-        vector_db_path: str = "agent/market_intelligence/vector_store",
+        vector_db_path: str = "vector_store",
         chunk_size: int = 1000,
         chunk_overlap: int = 200,
         rate_limit_pause: float = 1.0,

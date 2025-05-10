@@ -18,7 +18,7 @@ from qdrant_client.http.models import Distance, VectorParams
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.graph.message import add_messages
-
+from modules.utils.llm import LLM
 
 from dotenv import load_dotenv
 import os 
@@ -31,14 +31,8 @@ google_api_key = os.getenv("GEMINI_API_KEY")
 
 # --- Khởi tạo LLM, Embeddings và Vector Store ---
 # llm = ChatOllama(model="cogito:3b")
-llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash",
-    temperature=0.2,
-    max_tokens=None,
-    timeout=None,
-    max_retries=2,
-)
-embeddings = GoogleGenerativeAIEmbeddings(model="gemini-1.5-flash", google_api_key=google_api_key)
+llm = LLM.get_gemini_llm()
+embeddings = LLM.get_gemini_embedding()
 
 # --- Thiết lập Qdrant ---
 QDRANT_PATH = "./high_level/qdrant_data"
