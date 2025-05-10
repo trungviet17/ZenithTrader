@@ -1,4 +1,4 @@
-from agent.market_intelligence.graph import create_graph, create_sample_vectorstore
+from agent.market_intelligence.graph import create_market_intelligence_agent, create_sample_vectorstore
 from agent.trading_strategy.agents.buffett import create_buffett_agent
 from agent.trading_strategy.agents.murphy import create_murphy_agent
 from agent.trading_strategy.agents.graham import create_graham_agent
@@ -17,4 +17,4 @@ from agent.risk_manager.nodes import create_risk_manager_agent
 # ))
 
 
-graph = create_risk_manager_agent()
+graph = create_market_intelligence_agent()

@@ -146,9 +146,7 @@ def create_risk_manager_agent():
     workflow.add_node("error_handler", error_handler)
 
     workflow.add_edge("initialize_state", "assess_risk")
-    workflow.add_edge("generate_final_decision", END)
-    # workflow.add_edge("assess_risk", "create_mitigation_plan")
-    # workflow.add_edge("create_mitigation_plan", "generate_final_decision")
+  
     
     workflow.add_conditional_edges(
        "assess_risk",
@@ -168,13 +166,8 @@ def create_risk_manager_agent():
         }
     )
 
-    workflow.add_conditional_edges(
-        "generate_final_decision",
-        router,
-        {
-            "error_handler": "error_handler"
-        }
-    )
+    workflow.add_edge("generate_final_decision", END)
+    workflow.add_edge("error_handler", END)
     
 
     workflow.set_entry_point("initialize_state")

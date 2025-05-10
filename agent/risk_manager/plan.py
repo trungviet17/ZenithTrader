@@ -61,9 +61,9 @@ def generate_mitigation_plan(trade_decision: TradeDecision, risk_profile: RiskPr
         "position_sizing": position_sizing,
         "stop_loss": stop_loss,
         "additional_recommendations": risk_profile.recommendations,
-        "summary": f"Risk mitigation plan for {trade_decision.action} {trade_decision.asset_symbol}: "
+        "summary": f"Risk mitigation plan for {trade_decision.action} {trade_decision.symbol}: "
                    f"Adjust position to {position_sizing['suggested_quantity']} shares, "
-                   f"set stop loss at ${stop_loss['stop_price']}."
+                   f"set stop loss at ${stop_loss['stop_loss_price']}."
 
     }
 

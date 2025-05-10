@@ -1,4 +1,45 @@
 from langchain.prompts import PromptTemplate
+from agent.risk_manager.state import TradeDecision, RiskProfile
+
+def format_risk_profile(risk_profile):
+    """Format risk profile into readable text"""
+    formatted_text = f"""
+The overall risk for this trade has been assessed as {risk_profile.overall_risk.value.upper()} with the following factor breakdown:
+"""
+    for factor, assessment in risk_profile.factor_assessments.items():
+        factor_name = factor.value.replace('_', ' ').title()
+        formatted_text += f"""
+            - {factor_name} ({assessment.risk_level.value.upper()} risk, {assessment.confidence:.1%} confidence): 
+            {assessment.reasoning}
+            Suggested mitigations: {', '.join(assessment.mitigation_suggestions) if assessment.mitigation_suggestions else 'None'}
+            """
+    
+    formatted_text += f"""
+        Summary: {risk_profile.summary}
+
+        Recommendations:
+        {chr(10).join('- ' + rec for rec in risk_profile.recommendations)}
+    """
+    return formatted_text
+
+
+def format_mitigation_plan(mitigation_plan):
+    """Format mitigation plan into readable text"""
+    sizing = mitigation_plan['position_sizing']
+    stop_loss = mitigation_plan['stop_loss']
+    
+    formatted_text = f"""
+        1. Position Sizing: Reduce quantity from {sizing['original_quantity']} to {sizing['suggested_quantity']} shares ({sizing['risk_adjustment']:.0%} of original risk exposure) due to {sizing['reasoning'].split(':')[1].strip()}.
+
+        2. Stop Loss: Set stop loss at ${stop_loss['stop_loss_price']:.2f}, representing a {stop_loss['percentage']:.1%} buffer based on {stop_loss['reasoning'].split(':')[1].strip()}.
+
+        3. Additional Recommendations:
+        {chr(10).join('   - ' + rec for rec in mitigation_plan['additional_recommendations'])}
+
+        Summary: {mitigation_plan['summary']}
+        """
+    return formatted_text
+
 
 
 risk_reduction_prompt = """
@@ -15,6 +56,8 @@ risk_reduction_prompt = """
         - Price: ${trade_decision.price}
         - Agent: {trade_decision.agent_name}
         - Reasoning: {trade_decision.reasoning}
+        - Exchange: {trade_decision.exchange_name}
+        ```
 
         Risk Profile:
         {risk_profile}
@@ -49,7 +92,7 @@ risk_reduction_prompt = """
                 "exchange_name": "Exchange name",
                 "confidence": "Confidence score (0-1) indicating how much you agree with the original decision",
                 "risk_profile": "Risk profile summary",
-                "adjustment_reasoning": "Detailed explanation of why these changes were made, how they reduce risk, and how they maintain aspects of the original investment thesis"
+                "adjustment_reasoning": "Detailed explanation of why these changes were made, how they reduce risk, and how they maintain aspects of the original investment thesis (using just max 100 tokens for this part)",
         }}
         ```
 """
@@ -61,10 +104,15 @@ def get_risk_reduction_prompt(trade_decision, risk_profile, mitigation_plan):
         input_variables=["trade_decision", "risk_profile", "mitigation_plan"],
         template=risk_reduction_prompt
     )
+
+    formatted_risk_profile = format_risk_profile(risk_profile)
+    formatted_mitigation_plan = format_mitigation_plan(mitigation_plan)
+
+
     return prompt.format(
         trade_decision=trade_decision,
-        risk_profile=risk_profile,
-        mitigation_plan=mitigation_plan
+        risk_profile=formatted_risk_profile,
+        mitigation_plan=formatted_mitigation_plan
     )
 
 

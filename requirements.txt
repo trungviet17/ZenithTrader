@@ -1,10 +1,4 @@
-anaconda-anon-usage==0.4.4
-backports.tarfile==1.2.0
-brotli==1.0.9
-conda-content-trust==0.2.0
-importlib-metadata==8.0.0
-importlib-resources==6.4.0
-jaraco.text==3.12.1
+
 langchain-community==0.3.23
 langgraph-api==0.2.19
 langgraph-cli==0.2.8

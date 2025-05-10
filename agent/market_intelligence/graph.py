@@ -16,7 +16,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 
 
-def create_graph(): 
+def create_market_intelligence_agent(): 
     graph_builder = StateGraph(MarketIntelligenceState)
 
     # node 
