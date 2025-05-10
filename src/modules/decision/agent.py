@@ -1,252 +1,252 @@
-import pandas as pd
-import numpy as np
-from typing import TypedDict, Annotated, List, Dict, Any, Optional
-from uuid import uuid4
-from datetime import datetime
-import pytz
+# import pandas as pd
+# import numpy as np
+# from typing import TypedDict, Annotated, List, Dict, Any, Optional
+# from uuid import uuid4
+# from datetime import datetime
+# import pytz
 
-from langchain_ollama import ChatOllama, OllamaEmbeddings
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.documents import Document
-from langchain_qdrant import QdrantVectorStore
-from qdrant_client import QdrantClient
-from qdrant_client.http.models import Distance, VectorParams
-from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import add_messages
+# from langchain_ollama import ChatOllama, OllamaEmbeddings
+# from langchain_google_genai import ChatGoogleGenerativeAI
+# from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
+# from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+# from langchain_core.documents import Document
+# from langchain_qdrant import QdrantVectorStore
+# from qdrant_client import QdrantClient
+# from qdrant_client.http.models import Distance, VectorParams
+# from langgraph.graph import StateGraph, START, END
+# from langgraph.graph.message import add_messages
 
-# --- Khởi tạo LLM, Embeddings và Vector Store ---
-# llm = ChatOllama(model="cogito:3b")
-llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash",
-    temperature=0.2,
-    max_tokens=None,
-    timeout=None,
-    max_retries=2,
-)
-embeddings = OllamaEmbeddings(model="cogito:3b")
+# # --- Khởi tạo LLM, Embeddings và Vector Store ---
+# # llm = ChatOllama(model="cogito:3b")
+# llm = ChatGoogleGenerativeAI(
+#     model="gemini-1.5-flash",
+#     temperature=0.2,
+#     max_tokens=None,
+#     timeout=None,
+#     max_retries=2,
+# )
+# embeddings = OllamaEmbeddings(model="cogito:3b")
 
-# --- Thiết lập Qdrant ---
-QDRANT_PATH = "./decision_agent/qdrant_data"
-COLLECTION_NAME = "decision_history"
-client = QdrantClient(path=QDRANT_PATH)
+# # --- Thiết lập Qdrant ---
+# QDRANT_PATH = "./decision_agent/qdrant_data"
+# COLLECTION_NAME = "decision_history"
+# client = QdrantClient(path=QDRANT_PATH)
 
-def create_qdrant_collection(client: QdrantClient, collection_name: str, vector_size: int):
-    try:
-        client.get_collection(collection_name=collection_name)
-    except Exception:
-        client.create_collection(
-            collection_name=collection_name,
-            vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
-        )
+# def create_qdrant_collection(client: QdrantClient, collection_name: str, vector_size: int):
+#     try:
+#         client.get_collection(collection_name=collection_name)
+#     except Exception:
+#         client.create_collection(
+#             collection_name=collection_name,
+#             vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
+#         )
 
-embedding_size = len(embeddings.embed_query("test"))
-create_qdrant_collection(client, COLLECTION_NAME, embedding_size)
+# embedding_size = len(embeddings.embed_query("test"))
+# create_qdrant_collection(client, COLLECTION_NAME, embedding_size)
 
-vector_store = QdrantVectorStore(
-    client=client,
-    collection_name=COLLECTION_NAME,
-    embedding=embeddings,
-)
+# vector_store = QdrantVectorStore(
+#     client=client,
+#     collection_name=COLLECTION_NAME,
+#     embedding=embeddings,
+# )
 
-# --- Định nghĩa State cho Decision Agent ---
-class DecisionState(TypedDict):
-    messages: Annotated[List[BaseMessage], add_messages]
-    symbol: str
-    market_context: Optional[Dict]           # Thông tin thị trường
-    technical_analysis: Optional[str]     # Phân tích kỹ thuật
-    improvement_data: Optional[str]       # Cải tiến từ RL Agent
-    trading_strategy: Optional[str]       # Chiến lược giao dịch
-    risk_assessment: Optional[str]        # Đánh giá rủi ro
-    final_decision: Optional[str]         # Quyết định giao dịch cuối cùng
-    final_output: Optional[str]           # Kết quả cuối cùng
+# # --- Định nghĩa State cho Decision Agent ---
+# class DecisionState(TypedDict):
+#     messages: Annotated[List[BaseMessage], add_messages]
+#     symbol: str
+#     market_context: Optional[Dict]           # Thông tin thị trường
+#     technical_analysis: Optional[str]     # Phân tích kỹ thuật
+#     improvement_data: Optional[str]       # Cải tiến từ RL Agent
+#     trading_strategy: Optional[str]       # Chiến lược giao dịch
+#     risk_assessment: Optional[str]        # Đánh giá rủi ro
+#     final_decision: Optional[str]         # Quyết định giao dịch cuối cùng
+#     final_output: Optional[str]           # Kết quả cuối cùng
 
-# --- Hàm tiện ích ---
-def save_decision_to_vectorstore(decision: str, symbol: str) -> str:
-    now = datetime.now(pytz.UTC)
-    doc_id = str(uuid4())
-    metadata = {
-        "timestamp": now.isoformat(),
-        "symbol": symbol,
-    }
-    content = f"Trading Decision (3mo):\n{decision}"
+# # --- Hàm tiện ích ---
+# def save_decision_to_vectorstore(decision: str, symbol: str) -> str:
+#     now = datetime.now(pytz.UTC)
+#     doc_id = str(uuid4())
+#     metadata = {
+#         "timestamp": now.isoformat(),
+#         "symbol": symbol,
+#     }
+#     content = f"Trading Decision (3mo):\n{decision}"
 
-    try:
-        vector_store.add_documents(documents=[Document(page_content=content, metadata=metadata)], ids=[doc_id])
-        return f"Saved trading decision to vector store (ID: {doc_id})"
-    except Exception as e:
-        return f"Failed to save trading decision to vector store: {e}"
+#     try:
+#         vector_store.add_documents(documents=[Document(page_content=content, metadata=metadata)], ids=[doc_id])
+#         return f"Saved trading decision to vector store (ID: {doc_id})"
+#     except Exception as e:
+#         return f"Failed to save trading decision to vector store: {e}"
 
-# --- Các Node của Graph ---
+# # --- Các Node của Graph ---
 
-def generate_trading_decision(state: DecisionState) -> DecisionState:
-    """Node: Tạo quyết định giao dịch cuối cùng và lý do."""
-    market_context = state["market_context"]
-    technical_analysis = state["technical_analysis"]
-    improvement_data = state["improvement_data"]
-    trading_strategy = state["trading_strategy"]
-    risk_assessment = state["risk_assessment"]
-    symbol = state["symbol"]
-    messages = state["messages"]
+# def generate_trading_decision(state: DecisionState) -> DecisionState:
+#     """Node: Tạo quyết định giao dịch cuối cùng và lý do."""
+#     market_context = state["market_context"]
+#     technical_analysis = state["technical_analysis"]
+#     improvement_data = state["improvement_data"]
+#     trading_strategy = state["trading_strategy"]
+#     risk_assessment = state["risk_assessment"]
+#     symbol = state["symbol"]
+#     messages = state["messages"]
 
-    if not market_context or not technical_analysis or not improvement_data or not trading_strategy or not risk_assessment:
-        return {
-            **state,
-            "final_decision": "Không thể đưa ra quyết định giao dịch do thiếu dữ liệu.",
-            "messages": messages + [AIMessage(content="Không thể đưa ra quyết định giao dịch do thiếu dữ liệu.")]
-        }
+#     if not market_context or not technical_analysis or not improvement_data or not trading_strategy or not risk_assessment:
+#         return {
+#             **state,
+#             "final_decision": "Không thể đưa ra quyết định giao dịch do thiếu dữ liệu.",
+#             "messages": messages + [AIMessage(content="Không thể đưa ra quyết định giao dịch do thiếu dữ liệu.")]
+#         }
 
-    prompt_template = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                """Bạn là chuyên gia đưa ra quyết định giao dịch chứng khoán.
+#     prompt_template = ChatPromptTemplate.from_messages(
+#         [
+#             (
+#                 "system",
+#                 """Bạn là chuyên gia đưa ra quyết định giao dịch chứng khoán.
 
-                1. Tổng hợp thông tin từ các nguồn để đưa ra quyết định giao dịch cuối cùng (Mua, Bán, Giữ) cho mã chứng khoán.
-                2. Dựa trên:
-                   - Dữ liệu thị trường (giá, khối lượng, thay đổi giá).
-                   - Phân tích kỹ thuật.
-                   - Cải tiến quyết định từ RL Agent.
-                   - Chiến lược giao dịch từ Strategy Agent.
-                   - Đánh giá rủi ro từ Risk Management Agent.
+#                 1. Tổng hợp thông tin từ các nguồn để đưa ra quyết định giao dịch cuối cùng (Mua, Bán, Giữ) cho mã chứng khoán.
+#                 2. Dựa trên:
+#                    - Dữ liệu thị trường (giá, khối lượng, thay đổi giá).
+#                    - Phân tích kỹ thuật.
+#                    - Cải tiến quyết định từ RL Agent.
+#                    - Chiến lược giao dịch từ Strategy Agent.
+#                    - Đánh giá rủi ro từ Risk Management Agent.
 
-                3. Định dạng đầu ra:
-                   - Quyết định giao dịch (Mua, Bán, Giữ) với chi tiết triển khai (giá mục tiêu, khối lượng, dừng lỗ, v.v.).
-                   - Giải thích lý do dựa trên xu hướng thị trường, tín hiệu kỹ thuật, chiến lược, rủi ro, và cải tiến.
-                   - Tối đa 250 từ, rõ ràng, cô đọng."""
-            ),
-            MessagesPlaceholder(variable_name="messages"),
-            (
-                "user",
-                """Đưa ra quyết định giao dịch cuối cùng cho mã chứng khoán {symbol}.
-                **Dữ liệu Thị trường:**
-                {market_context}
+#                 3. Định dạng đầu ra:
+#                    - Quyết định giao dịch (Mua, Bán, Giữ) với chi tiết triển khai (giá mục tiêu, khối lượng, dừng lỗ, v.v.).
+#                    - Giải thích lý do dựa trên xu hướng thị trường, tín hiệu kỹ thuật, chiến lược, rủi ro, và cải tiến.
+#                    - Tối đa 250 từ, rõ ràng, cô đọng."""
+#             ),
+#             MessagesPlaceholder(variable_name="messages"),
+#             (
+#                 "user",
+#                 """Đưa ra quyết định giao dịch cuối cùng cho mã chứng khoán {symbol}.
+#                 **Dữ liệu Thị trường:**
+#                 {market_context}
 
-                **Phân tích Kỹ thuật:**
-                {technical_analysis}
+#                 **Phân tích Kỹ thuật:**
+#                 {technical_analysis}
 
-                **Cải tiến Quyết định:**
-                {improvement_data}
+#                 **Cải tiến Quyết định:**
+#                 {improvement_data}
 
-                **Chiến lược Giao dịch:**
-                {trading_strategy}
+#                 **Chiến lược Giao dịch:**
+#                 {trading_strategy}
 
-                **Đánh giá Rủi ro:**
-                {risk_assessment}"""
-            ),
-        ]
-    )
+#                 **Đánh giá Rủi ro:**
+#                 {risk_assessment}"""
+#             ),
+#         ]
+#     )
 
-    prompt_input = {
-        "messages": messages,
-        "symbol": symbol,
-        "market_context": market_context,
-        "technical_analysis": technical_analysis,
-        "improvement_data": improvement_data,
-        "trading_strategy": trading_strategy,
-        "risk_assessment": risk_assessment,
-    }
-    chain = prompt_template | llm
+#     prompt_input = {
+#         "messages": messages,
+#         "symbol": symbol,
+#         "market_context": market_context,
+#         "technical_analysis": technical_analysis,
+#         "improvement_data": improvement_data,
+#         "trading_strategy": trading_strategy,
+#         "risk_assessment": risk_assessment,
+#     }
+#     chain = prompt_template | llm
 
-    decision_message = chain.invoke(prompt_input)
-    decision_content = decision_message.content
-    save_decision_to_vectorstore(decision_content, symbol)
+#     decision_message = chain.invoke(prompt_input)
+#     decision_content = decision_message.content
+#     save_decision_to_vectorstore(decision_content, symbol)
 
-    return {
-        **state,
-        "final_decision": decision_content,
-        "messages": messages + [AIMessage(content=f"Quyết định giao dịch cuối cùng cho {symbol}:\n{decision_content}")]
-    }
+#     return {
+#         **state,
+#         "final_decision": decision_content,
+#         "messages": messages + [AIMessage(content=f"Quyết định giao dịch cuối cùng cho {symbol}:\n{decision_content}")]
+#     }
 
-def format_final_output(state: DecisionState) -> DecisionState:
-    symbol = state["symbol"]
-    final_decision = state["final_decision"]
-    messages = state["messages"]
+# def format_final_output(state: DecisionState) -> DecisionState:
+#     symbol = state["symbol"]
+#     final_decision = state["final_decision"]
+#     messages = state["messages"]
 
-    if not final_decision:
-        output = f"Không thể đưa ra quyết định giao dịch cho {symbol} do thiếu dữ liệu."
-        return {**state, "final_output": output, "messages": messages + [AIMessage(content=output)]}
+#     if not final_decision:
+#         output = f"Không thể đưa ra quyết định giao dịch cho {symbol} do thiếu dữ liệu."
+#         return {**state, "final_output": output, "messages": messages + [AIMessage(content=output)]}
 
 
-    output = f"""# Quyết định Giao dịch {symbol}:
-                {final_decision}
-                """
+#     output = f"""# Quyết định Giao dịch {symbol}:
+#                 {final_decision}
+#                 """
 
-    return {**state, "final_output": output, "messages": messages + [AIMessage(content=output)]}
+#     return {**state, "final_output": output, "messages": messages + [AIMessage(content=output)]}
 
-# --- Xây dựng Graph ---
+# # --- Xây dựng Graph ---
 
-def build_decision_workflow():
-    """Xây dựng và biên dịch graph LangGraph."""
-    workflow = StateGraph(DecisionState)
+# def build_decision_workflow():
+#     """Xây dựng và biên dịch graph LangGraph."""
+#     workflow = StateGraph(DecisionState)
 
-    workflow.add_node("generate_trading_decision", generate_trading_decision)
-    workflow.add_node("format_final_output", format_final_output)
+#     workflow.add_node("generate_trading_decision", generate_trading_decision)
+#     workflow.add_node("format_final_output", format_final_output)
 
-    workflow.add_edge(START, "generate_trading_decision")
-    workflow.add_edge("generate_trading_decision", "format_final_output")
-    workflow.add_edge("format_final_output", END)
+#     workflow.add_edge(START, "generate_trading_decision")
+#     workflow.add_edge("generate_trading_decision", "format_final_output")
+#     workflow.add_edge("format_final_output", END)
 
-    return workflow.compile()
+#     return workflow.compile()
 
-def decision_agent(symbol: str, market_context: Optional[str], technical_analysis: Optional[str], improvement_data: Optional[str], trading_strategy: Optional[str], risk_assessment: Optional[str]):
-    """Chạy agent quyết định giao dịch."""
-    initial_state = {
-        "messages": [HumanMessage(content=f"Đưa ra quyết định giao dịch cho {symbol}.")],
-        "symbol": symbol,
-        "market_context": market_context,
-        "technical_analysis": technical_analysis,
-        "improvement_data": improvement_data,
-        "trading_strategy": trading_strategy,
-        "risk_assessment": risk_assessment,
-        "final_decision": None,
-        "final_output": None,
-    }
-    graph = build_decision_workflow()
-    result = graph.invoke(initial_state)
-    return result.get("final_output", "Không có kết quả cuối cùng hoặc đã xảy ra lỗi.")
+# def decision_agent(symbol: str, market_context: Optional[str], technical_analysis: Optional[str], improvement_data: Optional[str], trading_strategy: Optional[str], risk_assessment: Optional[str]):
+#     """Chạy agent quyết định giao dịch."""
+#     initial_state = {
+#         "messages": [HumanMessage(content=f"Đưa ra quyết định giao dịch cho {symbol}.")],
+#         "symbol": symbol,
+#         "market_context": market_context,
+#         "technical_analysis": technical_analysis,
+#         "improvement_data": improvement_data,
+#         "trading_strategy": trading_strategy,
+#         "risk_assessment": risk_assessment,
+#         "final_decision": None,
+#         "final_output": None,
+#     }
+#     graph = build_decision_workflow()
+#     result = graph.invoke(initial_state)
+#     return result.get("final_output", "Không có kết quả cuối cùng hoặc đã xảy ra lỗi.")
 
-# --- Chạy thử nghiệm ---
-if __name__ == "__main__":
-    symbol_to_analyze = "AAPL"
+# # --- Chạy thử nghiệm ---
+# if __name__ == "__main__":
+#     symbol_to_analyze = "AAPL"
     
-    # Dữ liệu mẫu để thử nghiệm
-    market_context = (
-        f"Bối cảnh Thị trường cho {symbol_to_analyze}:\n"
-        f"- Tổng quan: Thị trường chung có xu hướng đi ngang trong vài tuần qua.\n"
-        f"- Ngành: Công nghệ đang có dấu hiệu tích lũy.\n"
-        f"- Tin tức: Không có tin tức trọng yếu nào gần đây ảnh hưởng đến giá."
-    )
-    low_level_data = (
-        f"Cải tiến Quyết định cho {symbol_to_analyze}:\n"
-        f"- Tránh bán khi RSI gần overbought nhưng MACD vẫn bullish.\n"
-        f"- Tín hiệu kháng cự tại 155 không đáng tin cậy trong xu hướng tăng mạnh.\n"
-        f"- Đề xuất: Tăng tỷ trọng khi giá phá vỡ kháng cự với khối lượng cao."
-    )
-    high_level_data = (
-        f"Chiến lược Giao dịch cho {symbol_to_analyze}:\n"
-        f"- Chiến lược: Momentum Trading\n"
-        f"- Triển khai: Mua khi giá phá vỡ kháng cự 155 với khối lượng cao, bán khi MACD chuyển bearish.\n"
-        f"- Lý do: Xu hướng tăng mạnh, MACD bullish, khối lượng giao dịch tăng."
-    )
-    risk_assessment = (
-        f"Đánh giá Rủi ro cho {symbol_to_analyze}:\n"
-        f"- Biến động: Cao (30% hàng năm), rủi ro giá giảm ngắn hạn.\n"
-        f"- Thanh khoản: Tốt, khối lượng giao dịch ổn định.\n"
-        f"- Rủi ro chiến lược: Mua gần kháng cự 155 có thể rủi ro nếu không phá vỡ.\n"
-        f"- Chiến lược giảm thiểu: Đặt dừng lỗ tại 145, phân bổ vốn không quá 20% danh mục."
-    )
+#     # Dữ liệu mẫu để thử nghiệm
+#     market_context = (
+#         f"Bối cảnh Thị trường cho {symbol_to_analyze}:\n"
+#         f"- Tổng quan: Thị trường chung có xu hướng đi ngang trong vài tuần qua.\n"
+#         f"- Ngành: Công nghệ đang có dấu hiệu tích lũy.\n"
+#         f"- Tin tức: Không có tin tức trọng yếu nào gần đây ảnh hưởng đến giá."
+#     )
+#     low_level_data = (
+#         f"Cải tiến Quyết định cho {symbol_to_analyze}:\n"
+#         f"- Tránh bán khi RSI gần overbought nhưng MACD vẫn bullish.\n"
+#         f"- Tín hiệu kháng cự tại 155 không đáng tin cậy trong xu hướng tăng mạnh.\n"
+#         f"- Đề xuất: Tăng tỷ trọng khi giá phá vỡ kháng cự với khối lượng cao."
+#     )
+#     high_level_data = (
+#         f"Chiến lược Giao dịch cho {symbol_to_analyze}:\n"
+#         f"- Chiến lược: Momentum Trading\n"
+#         f"- Triển khai: Mua khi giá phá vỡ kháng cự 155 với khối lượng cao, bán khi MACD chuyển bearish.\n"
+#         f"- Lý do: Xu hướng tăng mạnh, MACD bullish, khối lượng giao dịch tăng."
+#     )
+#     risk_assessment = (
+#         f"Đánh giá Rủi ro cho {symbol_to_analyze}:\n"
+#         f"- Biến động: Cao (30% hàng năm), rủi ro giá giảm ngắn hạn.\n"
+#         f"- Thanh khoản: Tốt, khối lượng giao dịch ổn định.\n"
+#         f"- Rủi ro chiến lược: Mua gần kháng cự 155 có thể rủi ro nếu không phá vỡ.\n"
+#         f"- Chiến lược giảm thiểu: Đặt dừng lỗ tại 145, phân bổ vốn không quá 20% danh mục."
+#     )
 
-    print(f"\n--- Bắt đầu Workflow Quyết định Giao dịch cho {symbol_to_analyze} ---")
-    result = decision_agent(
-        symbol_to_analyze,
-        market_context,
-        low_level_data,
-        high_level_data,
-        risk_assessment
-    )
-    print(f"\n--- Workflow Quyết định Giao dịch cho {symbol_to_analyze} Hoàn thành ---")
+#     print(f"\n--- Bắt đầu Workflow Quyết định Giao dịch cho {symbol_to_analyze} ---")
+#     result = decision_agent(
+#         symbol_to_analyze,
+#         market_context,
+#         low_level_data,
+#         high_level_data,
+#         risk_assessment
+#     )
+#     print(f"\n--- Workflow Quyết định Giao dịch cho {symbol_to_analyze} Hoàn thành ---")
 
-    print("\n--- Kết quả Quyết định Cuối cùng ---")
-    print(result)
+#     print("\n--- Kết quả Quyết định Cuối cùng ---")
+#     print(result)

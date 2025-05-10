@@ -8,7 +8,7 @@ from uuid import uuid4
 import json
 
 from langchain_core.tools import tool
-from langchain_ollama import ChatOllama, OllamaEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -19,6 +19,15 @@ from qdrant_client.http.models import Distance, VectorParams
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.graph.message import add_messages
+from dotenv import load_dotenv
+import os 
+load_dotenv()
+
+
+google_api_key = os.getenv("GEMINI_API_KEY")
+
+
+
 
 # --- Khởi tạo LLM, Embeddings và Vector Store ---
 # llm = ChatOllama(model="cogito:3b")
@@ -29,7 +38,10 @@ llm = ChatGoogleGenerativeAI(
     timeout=None,
     max_retries=2,
 )
-embeddings = OllamaEmbeddings(model="cogito:3b")
+embeddings = GoogleGenerativeAIEmbeddings(
+    model="models/text-embedding-004",
+    google_api_key=google_api_key,
+)
 
 # --- Thiết lập Qdrant ---
 QDRANT_PATH = "./low_level/qdrant_data"

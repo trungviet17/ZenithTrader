@@ -4,22 +4,27 @@ import pytz
 from uuid import uuid4
 
 # Langchain và Qdrant imports
-from langchain_ollama import ChatOllama
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from langchain_core.documents import Document
-from langchain_qdrant import QdrantVectorStore
-from qdrant_client import QdrantClient
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 
 # Import các module agent
-from modules.market import agent as market_intelligent_agent
 from modules.low_level import agent as technical_analysis_agent
 from modules.high_level import agent as high_level_agent
-from modules.strategy import agent as strategy_agent
-from modules.risk_management import agent as risk_management_agent
+
 from modules.decision import agent as decision_agent
+
+from modules.market_intelligence.graph import run_market_intelligence_agent
+from modules.risk_manager.nodes import run_risk_manager_agent
+from modules.trading_strategy.agents.buffett import run_buffett_analysis
+from modules.trading_strategy.agents.lynch import  run_lynch_analysis
+from modules.trading_strategy.agents.graham import run_graham_analysis
+from modules.trading_strategy.agents.murphy import run_murphy_analysis
+from modules.risk_manager.state import TradeDecision
+
+
 
 # --- Khởi tạo LLM và Embeddings ---
 # llm = ChatOllama(model="cogito:3b")
@@ -36,11 +41,12 @@ class MasterState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
     symbol: str
     market_data: Optional[Dict]           # Từ Market Intelligent Agent
+    holding: Optional[Dict[str, int]]         # Từ Market Intelligent Agent
     technical_analysis: Optional[str]     # Từ Technical Analysis Agent
     improvement_data: Optional[str]       # Từ High-Level Reflection Agent
     trading_strategy: Optional[str]       # Từ Strategy Agent
     risk_assessment: Optional[str]        # Từ Risk Management Agent
-    final_decision: Optional[str]         # Từ Decision Agent
+    decision: Optional[TradeDecision]         # Từ Decision Agent
     final_output: Optional[str]           # Kết quả cuối cùng
 
 # --- Các Node của Master Workflow ---
@@ -50,24 +56,24 @@ def market_intelligent_node(state: MasterState) -> MasterState:
     symbol = state["symbol"]
     messages = state["messages"]
 
-    market_state = {
-        "messages": messages,
-        "symbol": symbol,
-        "market_data": None,
-        "market_news": None,
-        "market_context": None,
-        "market_summary": None,
-        "history_query": None,
-        "past_market": None,
-        "final_output": None,
-    }
+    past_analysis, late_analysis = run_market_intelligence_agent(symbol)
 
-    market_state = market_intelligent_agent(market_state)
+    market_state =  ""
+
+    for analysis in past_analysis:
+        market_state += f"Phân tích quá khứ: {analysis['analysis']}\n"
+        market_state += f"Tóm tắt: {analysis['summaries']}\n"
+
+    for analysis in late_analysis:
+        market_state += f"Phân tích mới nhất: {analysis['analysis']}\n"
+        market_state += f"Tóm tắt: {analysis['summaries']}\n"
+
+
 
     return {
         **state,
         "market_data": market_state,
-        "messages": market_state["messages"]
+        "messages": messages + AIMessage(content=str(market_state))
     }
 
 def technical_analysis_node(state: MasterState) -> MasterState:
@@ -75,20 +81,7 @@ def technical_analysis_node(state: MasterState) -> MasterState:
     market_data = state["market_data"]
     messages = state["messages"]
 
-    tech_state = {
-        "messages": messages,
-        "symbol": symbol,
-        "market_data": market_data,
-        "technical_indicators": None,
-        "technical_analysis": None,
-        "reflection_query": None,
-        "historical_insights": None,
-        "reflection_iteration": 0,
-        "max_reflections": 1,
-        "final_output": None
-    }
-
-    tech_state = technical_analysis_agent(tech_state)
+    tech_state = technical_analysis_agent(symbol, market_data, max_reflections=1)
 
     return {
         **state,
@@ -102,22 +95,7 @@ def high_level_reflection_node(state: MasterState) -> MasterState:
     technical_analysis = state["technical_analysis"]
     messages = state["messages"]
 
-    reflection_state = {
-        "messages": messages,
-        "symbol": symbol,
-        "market_data": market_data,
-        "technical_analysis": technical_analysis,
-        "trade_history": None,
-        "reflection_query": None,
-        "historical_insights": None,
-        "improvement_suggestions": None,
-        "reflection_iteration": 0,
-        "max_reflections": 1,
-        "final_output": None
-    }
-
-
-    reflection_state = high_level_agent(reflection_state)
+    reflection_state = high_level_agent(symbol, market_data, technical_analysis, max_reflections=1)
     
     return {
         **state,
@@ -127,54 +105,50 @@ def high_level_reflection_node(state: MasterState) -> MasterState:
 
 def strategy_node(state: MasterState) -> MasterState:
     symbol = state["symbol"]
-    market_data = state["market_data"]
-    technical_analysis = state["technical_analysis"]
-    improvement_data = state["improvement_data"]
     messages = state["messages"]
 
-    strategy_state = {
-        "messages": messages,
-        "symbol": symbol,
-        "market_data": market_data,
-        "research_data": technical_analysis,
-        "improvement_data": improvement_data,
-        "trading_strategy": None,
-        "final_output": None
+    buffett_analysis = run_buffett_analysis(symbol)
+    lynch_analysis = run_lynch_analysis(symbol)
+    graham_analysis = run_graham_analysis(symbol)
+    murphy_analysis = run_murphy_analysis(symbol)
+
+    all_trading_strategies = {
+        "buffett": buffett_analysis,
+        "lynch": lynch_analysis,
+        "graham": graham_analysis,
+        "murphy": murphy_analysis
     }
 
-    strategy_state = strategy_agent(strategy_state)
+    strategy_state = ""
+    for strategy, analysis in all_trading_strategies.items():
+        strategy_state += f"Phân tích {strategy}:\n"
+        strategy_state += f"Signal: {analysis['signal']}\n"
+        strategy_state += f"Confidence: {analysis['confidence']}\n"
+        strategy_state += f"Reasoning: {analysis['reasoning']}\n"
+        
+
+
+
 
     return {
         **state,
         "trading_strategy": strategy_state,
-        "messages": messages + strategy_state
+        "messages": messages + AIMessage(content=str(strategy_state))
     }
 
 def risk_management_node(state: MasterState) -> MasterState:
-    symbol = state["symbol"]
-    market_data = state["market_data"]
-    technical_analysis = state["technical_analysis"]
-    improvement_data = state["improvement_data"]
-    trading_strategy = state["trading_strategy"]
+    
+    decision = state["decision"]
     messages = state["messages"]
+    holding = state["holding"]
 
-
-    risk_state = {
-        "messages": messages,
-        "symbol": symbol,
-        "market_data": market_data["raw_data"],
-        "improvement_data": improvement_data,
-        "trading_strategy": trading_strategy,
-        "risk_assessment": None,
-        "final_output": None
-    }
-
-    risk_state = risk_management_agent(risk_state)
+    risk_reduce = run_risk_manager_agent(decision, holding)
 
     return {
         **state,
-        "risk_assessment": risk_state,
-        "messages": messages + risk_state
+        "risk_assessment": risk_reduce[1],
+        "decision": risk_reduce[0],
+        "messages": messages + AIMessage(content=str(risk_reduce[1]))
     }
 
 def decision_node(state: MasterState) -> MasterState:
@@ -186,19 +160,7 @@ def decision_node(state: MasterState) -> MasterState:
     risk_assessment = state["risk_assessment"]
     messages = state["messages"]
 
-    decision_state = {
-        "messages": messages,
-        "symbol": symbol,
-        "market_data": market_data["raw_data"],
-        "technical_analysis": technical_analysis,
-        "improvement_data": improvement_data,
-        "trading_strategy": trading_strategy,
-        "risk_assessment": risk_assessment,
-        "final_decision": None,
-        "final_output": None
-    }
-
-    decision_state = decision_agent(decision_state)
+    decision_state = decision_agent(symbol, market_data, technical_analysis, improvement_data, trading_strategy, risk_assessment)
 
     return {
         **state,
@@ -211,8 +173,6 @@ def format_final_output(state: MasterState) -> MasterState:
     final_decision = state["final_decision"]
     messages = state["messages"]
 
-
-
     output = f"""{final_decision}"""
 
     return {**state, "final_output": output, "messages": messages + [AIMessage(content=output)]}
@@ -223,11 +183,11 @@ def build_master_workflow():
     """Xây dựng và biên dịch Master Workflow."""
     workflow = StateGraph(MasterState)
 
-    workflow.add_node("market_intelligent", market_intelligent_node)
+    # workflow.add_node("market_intelligent", market_intelligent_node)
     workflow.add_node("technical_analysis", technical_analysis_node)
     workflow.add_node("high_level_reflection", high_level_reflection_node)
-    workflow.add_node("strategy", strategy_node)
-    workflow.add_node("risk_management", risk_management_node)
+    # workflow.add_node("strategy", strategy_node)
+    # workflow.add_node("risk_management", risk_management_node)
     workflow.add_node("decision", decision_node)
     workflow.add_node("format_final_output", format_final_output)
 
