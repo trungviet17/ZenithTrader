@@ -50,24 +50,12 @@ def market_intelligent_node(state: MasterState) -> MasterState:
     symbol = state["symbol"]
     messages = state["messages"]
 
-    market_state = {
-        "messages": messages,
-        "symbol": symbol,
-        "market_data": None,
-        "market_news": None,
-        "market_context": None,
-        "market_summary": None,
-        "history_query": None,
-        "past_market": None,
-        "final_output": None,
-    }
-
-    market_state = market_intelligent_agent(market_state)
+    market_state = market_intelligent_agent(symbol, messages)
 
     return {
         **state,
         "market_data": market_state,
-        "messages": market_state["messages"]
+        "messages": messages + market_state
     }
 
 def technical_analysis_node(state: MasterState) -> MasterState:
@@ -75,20 +63,7 @@ def technical_analysis_node(state: MasterState) -> MasterState:
     market_data = state["market_data"]
     messages = state["messages"]
 
-    tech_state = {
-        "messages": messages,
-        "symbol": symbol,
-        "market_data": market_data,
-        "technical_indicators": None,
-        "technical_analysis": None,
-        "reflection_query": None,
-        "historical_insights": None,
-        "reflection_iteration": 0,
-        "max_reflections": 1,
-        "final_output": None
-    }
-
-    tech_state = technical_analysis_agent(tech_state)
+    tech_state = technical_analysis_agent(symbol, market_data, max_reflections=1)
 
     return {
         **state,
@@ -102,22 +77,7 @@ def high_level_reflection_node(state: MasterState) -> MasterState:
     technical_analysis = state["technical_analysis"]
     messages = state["messages"]
 
-    reflection_state = {
-        "messages": messages,
-        "symbol": symbol,
-        "market_data": market_data,
-        "technical_analysis": technical_analysis,
-        "trade_history": None,
-        "reflection_query": None,
-        "historical_insights": None,
-        "improvement_suggestions": None,
-        "reflection_iteration": 0,
-        "max_reflections": 1,
-        "final_output": None
-    }
-
-
-    reflection_state = high_level_agent(reflection_state)
+    reflection_state = high_level_agent(symbol, market_data, technical_analysis, max_reflections=1)
     
     return {
         **state,
@@ -132,17 +92,7 @@ def strategy_node(state: MasterState) -> MasterState:
     improvement_data = state["improvement_data"]
     messages = state["messages"]
 
-    strategy_state = {
-        "messages": messages,
-        "symbol": symbol,
-        "market_data": market_data,
-        "research_data": technical_analysis,
-        "improvement_data": improvement_data,
-        "trading_strategy": None,
-        "final_output": None
-    }
-
-    strategy_state = strategy_agent(strategy_state)
+    strategy_state = strategy_agent(symbol, market_data, technical_analysis, improvement_data)
 
     return {
         **state,
@@ -158,18 +108,7 @@ def risk_management_node(state: MasterState) -> MasterState:
     trading_strategy = state["trading_strategy"]
     messages = state["messages"]
 
-
-    risk_state = {
-        "messages": messages,
-        "symbol": symbol,
-        "market_data": market_data["raw_data"],
-        "improvement_data": improvement_data,
-        "trading_strategy": trading_strategy,
-        "risk_assessment": None,
-        "final_output": None
-    }
-
-    risk_state = risk_management_agent(risk_state)
+    risk_state = risk_management_agent(symbol, market_data, technical_analysis, improvement_data, trading_strategy)
 
     return {
         **state,
@@ -186,19 +125,7 @@ def decision_node(state: MasterState) -> MasterState:
     risk_assessment = state["risk_assessment"]
     messages = state["messages"]
 
-    decision_state = {
-        "messages": messages,
-        "symbol": symbol,
-        "market_data": market_data["raw_data"],
-        "technical_analysis": technical_analysis,
-        "improvement_data": improvement_data,
-        "trading_strategy": trading_strategy,
-        "risk_assessment": risk_assessment,
-        "final_decision": None,
-        "final_output": None
-    }
-
-    decision_state = decision_agent(decision_state)
+    decision_state = decision_agent(symbol, market_data, technical_analysis, improvement_data, trading_strategy, risk_assessment)
 
     return {
         **state,
@@ -210,8 +137,6 @@ def format_final_output(state: MasterState) -> MasterState:
     """Node: Định dạng kết quả cuối cùng."""
     final_decision = state["final_decision"]
     messages = state["messages"]
-
-
 
     output = f"""{final_decision}"""
 

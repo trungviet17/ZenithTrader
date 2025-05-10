@@ -380,6 +380,8 @@ def market_intelligent_agent(symbol: str):
     result = graph.invoke(initial_state)
     return result.get("final_output", "Không có kết quả cuối cùng hoặc đã xảy ra lỗi.")
 
+graph = build_workflow()
+
 # --- Chạy thử nghiệm ---
 if __name__ == "__main__":
     symbol_to_analyze = "AAPL"

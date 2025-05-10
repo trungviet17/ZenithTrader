@@ -5,8 +5,10 @@ import numpy as np
 from typing import TypedDict, Annotated, List, Dict, Any, Literal, Optional
 from uuid import uuid4
 import json
+from pydantic import BaseModel, Field
 
 from langchain_core.tools import tool
+from langchain_tavily import TavilySearch
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
@@ -70,107 +72,27 @@ class HighLevelReflectionState(TypedDict):
     final_output: Optional[str]
 
 # --- Tools Phân tích Giao dịch ---
-@tool
-def evaluate_trade_performance(trade_history: List[Dict]) -> Dict:
-    """
-    Đánh giá hiệu suất giao dịch dựa trên lịch sử giao dịch.
+tavily_search_tool = TavilySearch(
+    max_results=5,
+    topic="general"
+)
 
-    Args:
-        trade_history: Danh sách các giao dịch (mỗi giao dịch chứa date, action, price, quantity, profit_loss, outcome).
-
-    Returns:
-        Dictionary chứa các chỉ số hiệu suất (tỷ lệ thắng, lợi nhuận trung bình, tỷ lệ rủi ro/lợi nhuận).
-    """
-    try:
-        if not trade_history:
-            return {"error": "Không có lịch sử giao dịch để đánh giá."}
-
-        total_trades = len(trade_history)
-        wins = sum(1 for trade in trade_history if trade["outcome"] == "Profit")
-        win_rate = (wins / total_trades) * 100 if total_trades > 0 else 0
-        avg_profit_loss = np.mean([trade["profit_loss"] for trade in trade_history]) if total_trades > 0 else 0
-        total_profit = sum(trade["profit_loss"] for trade in trade_history)
-
-        # Tính tỷ lệ rủi ro/lợi nhuận (giả sử rủi ro là giá vào * 2% mỗi giao dịch)
-        risk_reward_ratios = []
-        for trade in trade_history:
-            entry_price = trade["price"]
-            risk = entry_price * 0.02  # Giả định rủi ro 2%
-            reward = trade["profit_loss"] / trade["quantity"] if trade["quantity"] > 0 else 0
-            if risk > 0:
-                risk_reward_ratios.append(reward / risk)
-        avg_risk_reward = np.mean(risk_reward_ratios) if risk_reward_ratios else 0
-
-        return json.loads(json.dumps({
-            "total_trades": total_trades,
-            "win_rate_pct": round(win_rate, 2),
-            "avg_profit_loss": round(avg_profit_loss, 2),
-            "total_profit": round(total_profit, 2),
-            "avg_risk_reward_ratio": round(avg_risk_reward, 2)
-        }, ignore_nan=True))
-    except Exception as e:
-        return {"error": f"Lỗi khi đánh giá hiệu suất giao dịch: {str(e)}"}
-
-@tool
-def simulate_alternative_trades(trade_history: List[Dict], technical_analysis: str) -> Dict:
-    """
-    Mô phỏng các kịch bản giao dịch thay thế để tối ưu hóa lợi nhuận.
-
-    Args:
-        trade_history: Danh sách các giao dịch.
-        technical_analysis: Phân tích kỹ thuật cung cấp thông tin về hỗ trợ, kháng cự, tín hiệu.
-
-    Returns:
-        Dictionary chứa các đề xuất giao dịch thay thế và lợi nhuận tiềm năng.
-    """
-    try:
-        if not trade_history or not technical_analysis:
-            return {"error": "Thiếu lịch sử giao dịch hoặc phân tích kỹ thuật."}
-
-        # Giả lập các kịch bản thay thế dựa trên hỗ trợ/kháng cự từ phân tích kỹ thuật
-        support = None
-        resistance = None
-        for line in technical_analysis.split("\n"):
-            if "Hỗ trợ" in line:
-                support = float(line.split(":")[-1].strip().split(";")[0])
-            if "Kháng cự" in line:
-                resistance = float(line.split(":")[-1].strip().split(";")[0])
-
-        alternative_trades = []
-        for trade in trade_history:
-            original_price = trade["price"]
-            action = trade["action"]
-            quantity = trade["quantity"]
-            profit_loss = trade["profit_loss"]
-
-            if action == "Buy" and support and original_price > support:
-                alt_price = support  # Mua tại mức hỗ trợ
-                alt_profit = (original_price - alt_price) * quantity
-                alternative_trades.append({
-                    "original_trade": trade,
-                    "alternative_action": "Buy",
-                    "alternative_price": alt_price,
-                    "potential_profit_improvement": round(alt_profit, 2)
-                })
-            elif action == "Sell" and resistance and original_price < resistance:
-                alt_price = resistance  # Bán tại mức kháng cự
-                alt_profit = (alt_price - original_price) * quantity
-                alternative_trades.append({
-                    "original_trade": trade,
-                    "alternative_action": "Sell",
-                    "alternative_price": alt_price,
-                    "potential_profit_improvement": round(alt_profit, 2)
-                })
-
-        return json.loads(json.dumps({
-            "alternative_trades": alternative_trades if alternative_trades else ["Không có kịch bản thay thế khả thi."]
-        }, ignore_nan=True))
-    except Exception as e:
-        return {"error": f"Lỗi khi mô phỏng giao dịch thay thế: {str(e)}"}
-
-tools = [evaluate_trade_performance, simulate_alternative_trades]
+tools = [tavily_search_tool]
 tool_node = ToolNode(tools)
 llm_with_tools = llm.bind_tools(tools=tools, tool_choice="auto")
+
+class AnswerQuestionResponder(BaseModel):
+    """Schema cho câu trả lời"""
+    analysis: str = Field(description="Phân tích kỹ thuật")
+    critique: str = Field(description="Suy nghĩ của bạn về câu trả lời ban đầu")
+    query: list[str] = Field(description="1-3 truy vấn tìm kiếm để nghiên cứu cải tiến nhằm giải quyết lời chỉ trích về câu trả lời hiện tại của bạn")
+
+class AnswerQuestionRevise(BaseModel):
+    """Schema cho câu trả lời"""
+    analysis: str = Field(description="Phân tích kỹ thuật")
+    critique: str = Field(description="Suy nghĩ của bạn về câu trả lời ban đầu")
+    query: list[str] = Field(description="1-3 truy vấn tìm kiếm để nghiên cứu cải tiến nhằm giải quyết lời chỉ trích về câu trả lời hiện tại của bạn")
+    references: list[str] = Field(description="Danh sách các tài liệu tham khảo để cải tiến câu trả lời")
 
 # --- Hàm tiện ích ---
 def save_to_vectorstore(analysis_text: str, symbol: str, market_data: Optional[str]) -> str:
@@ -197,11 +119,6 @@ def generate_initial_response(state: HighLevelReflectionState) -> HighLevelRefle
     trade_history = state["trade_history"]
     messages = state["messages"]
 
-    trade_summary = "\n".join([
-        f"- Trade {t['date']} ({t['action']} @ {t['price']}): {t['reason']} Outcome: {t['outcome']} (P/L: {t['profit_loss']}). Analysis: {t['analysis']}"
-        for t in trade_history
-    ]) if trade_history else "Không có lịch sử giao dịch."
-
     prompt_template = ChatPromptTemplate.from_messages(
         [
             (
@@ -227,10 +144,7 @@ def generate_initial_response(state: HighLevelReflectionState) -> HighLevelRefle
                    - Kịch bản thay thế để tối ưu lợi nhuận.
                    - Bài học kinh nghiệm.
                    - Khuyến nghị giao dịch hiện tại.
-                   - Tối đa 400 từ, rõ ràng, mạch lạc.
-                7. Sử dụng các công cụ:
-                   - evaluate_trade_performance
-                   - simulate_alternative_trades"""
+                   - Tối đa 400 từ, rõ ràng, mạch lạc."""
             ),
             MessagesPlaceholder(variable_name="messages"),
             (
@@ -238,7 +152,7 @@ def generate_initial_response(state: HighLevelReflectionState) -> HighLevelRefle
                 """Phân tích quyết định giao dịch cho mã chứng khoán {symbol}.
                 Bối cảnh thị trường: {market_data}
                 Phân tích kỹ thuật: {technical_analysis}
-                Lịch sử giao dịch: {trade_summary}"""
+                Lịch sử giao dịch: {trade_history}"""
             ),
         ]
     )
@@ -248,9 +162,9 @@ def generate_initial_response(state: HighLevelReflectionState) -> HighLevelRefle
         "symbol": symbol,
         "market_data": market_data,
         "technical_analysis": technical_analysis,
-        "trade_summary": trade_summary,
+        "trade_history": trade_history,
     }
-    chain = prompt_template | llm_with_tools
+    chain = prompt_template | llm.with_structured_output(AnswerQuestionResponder)
 
     analysis_message = chain.invoke(prompt_input)
 
@@ -259,38 +173,18 @@ def generate_initial_response(state: HighLevelReflectionState) -> HighLevelRefle
             **state,
             "messages": messages + [analysis_message],
         }
-    else:
-        analysis_content = analysis_message.content
-        prompt_critique = f"""
-            Đánh giá phân tích quyết định giao dịch cho {symbol}:
-            - Phân tích: {analysis_content}
-            - Bối cảnh thị trường: {market_data}
-            Yêu cầu:
-            1. Đánh giá tính chính xác, logic và thực tiễn của phân tích.
-            2. Xác định 1-2 điểm mạnh và 1-2 điểm yếu.
-            Đầu ra: Tối đa 100 từ, ngắn gọn, rõ ràng.
-            """
-        critique_message = llm.invoke(prompt_critique)
-        critique_content = critique_message.content
-
-        prompt_query = f"""
-            Tạo câu hỏi truy vấn tìm kiếm lịch sử phân tích giao dịch cho {symbol} dựa trên:
-            - Phân tích: {analysis_content}
-            - Đánh giá: {critique_content}
-            Yêu cầu: Truy vấn cụ thể, tập trung vào tín hiệu kỹ thuật, quyết định giao dịch, và bài học kinh nghiệm.
-            Đầu ra: Tối đa 50 từ.
-            """
-        query_message = llm.invoke(prompt_query)
-        query_content = query_message.content
-
-        return {
-            **state,
-            "response": analysis_content,
-            "critique": critique_content,
-            "query": query_content,
-            "reflection_iteration": 0,
-            "messages": messages + [AIMessage(content=f"Phân tích quyết định giao dịch cho {symbol}:\n{analysis_content}")]
-        }
+    analysis_content = analysis_message.analysis
+    critique_content = analysis_message.critique
+    query_content = analysis_message.query
+    
+    return {
+        **state,
+        "response": analysis_content,
+        "critique": critique_content,
+        "query": query_content,
+        "reflection_iteration": 0,
+        "messages": messages + [AIMessage(content=f"Phân tích quyết định giao dịch cho {symbol}:\n{analysis_content}")]
+    }
 
 def retrieve_historical(state: HighLevelReflectionState) -> HighLevelReflectionState:
     query = state["query"]
@@ -326,51 +220,58 @@ def refine_analysis(state: HighLevelReflectionState) -> HighLevelReflectionState
     response = state["response"]
     reflection_data = state["reflection_data"]
     critique = state["critique"]
-    query = state["query"]
     symbol = state["symbol"]
     messages = state["messages"]
     iteration = state["reflection_iteration"]
+    
+    prompt_template = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                """Bạn là một chuyên gia phân tích giao dịch chứng khoán, có khả năng đánh giá và tối ưu hóa các quyết định giao dịch.
 
-    prompt_analysis = f"""
-        Tinh chỉnh phân tích quyết định giao dịch cho {symbol} dựa trên:
-        - Phân tích ban đầu: {response}
-        - Đánh giá: {critique}
-        - Lịch sử: {reflection_data}
-        Yêu cầu:
-        1. Cải thiện theo đánh giá và lịch sử (thêm kịch bản thay thế, phân tích sâu hơn).
-        2. Đảm bảo tính chính xác, thực tiễn và phù hợp với bối cảnh thị trường.
-        3. Tóm tắt bài học kinh nghiệm và khuyến nghị giao dịch hiện tại.
-        Đầu ra: Tối đa 400 từ.
-        """
-    refined_analysis_message = llm.invoke(prompt_analysis)
-    refined_analysis_content = refined_analysis_message.content
+                Yêu cầu:
+                1. Tinh chỉnh phân tích quyết định giao dịch dựa trên phản hồi từ người dùng.
+                2. Đánh giá tính chính xác, logic và thực tiễn của phân tích.
+                3. Đưa ra 1-2 điểm mạnh và 1-2 điểm yếu trong phân tích.
+                4. Tạo câu hỏi truy vấn tìm kiếm lịch sử để cải tiến phân tích.
+                5. Định dạng đầu ra:
+                   - Phân tích đã tinh chỉnh.
+                   - Đánh giá (điểm mạnh/yếu).
+                   - Câu hỏi truy vấn tìm kiếm lịch sử.
+                   - Tối đa 400 từ cho phân tích, 100 từ cho đánh giá, 50 từ cho câu hỏi."""
+            ),
+            MessagesPlaceholder(variable_name="messages"),
+            (
+                "user",
+                """Tinh chỉnh phân tích quyết định giao dịch cho mã chứng khoán {symbol}.
+                Phân tích ban đầu: {response}
+                Đánh giá: {critique}
+                Lịch sử: {reflection_data}"""
+            ),
+        ]
+    )
 
-    prompt_critique = f"""
-        Đánh giá phân tích quyết định giao dịch đã tinh chỉnh cho {symbol}:
-        - Phân tích: {refined_analysis_content}
-        Yêu cầu:
-        1. Đánh giá tính chính xác, logic và thực tiễn.
-        2. Xác định 1-2 điểm mạnh và 1-2 điểm yếu..
-        Đầu ra: Tối đa 100 từ.
-        """
-    refined_critique_message = llm.invoke(prompt_critique)
-    refined_critique_content = refined_critique_message.content
-
-    prompt_query = f"""
-        Tạo câu hỏi truy vấn tìm kiếm lịch sử cho phân tích quyết định giao dịch đã tinh chỉnh của {symbol}:
-        - Phân tích: {refined_analysis_content}
-        - Đánh giá: {refined_critique_content}
-        Yêu cầu: Truy vấn cụ thể, tập trung vào tín hiệu kỹ thuật, quyết định giao dịch, và bài học.
-        Đầu ra: Tối đa 50 từ.
-        """
-    refined_query_message = llm.invoke(prompt_query)
-    refined_query_content = refined_query_message.content
+    prompt_input = {
+        "messages": messages,
+        "symbol": symbol,
+        "response": response,
+        "critique": critique,
+        "reflection_data": reflection_data,
+    }
+    chain = prompt_template | llm.with_structured_output(AnswerQuestionRevise)
+    refined_message = chain.invoke(prompt_input)
+    refined_analysis_content = refined_message.analysis
+    refined_critique_content = refined_message.critique
+    refined_query_content = refined_message.query
+    refined_references_content = refined_message.references
 
     return {
         **state,
         "response": refined_analysis_content,
         "critique": refined_critique_content,
         "query": refined_query_content,
+        "reflection_data": refined_references_content,
         "reflection_iteration": iteration + 1,
         "messages": messages + [AIMessage(content=f"Phân tích đã tinh chỉnh (Iter {iteration + 1}):\n{refined_analysis_content}")]
     }
@@ -389,7 +290,6 @@ def format_final_output(state: HighLevelReflectionState) -> HighLevelReflectionS
 
     output = f"""
         # Phân tích Quyết định Giao dịch {symbol}
-        **Ngày phân tích:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         **Bối cảnh Thị trường:**  
         {market_data}
 
