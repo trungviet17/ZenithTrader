@@ -173,8 +173,14 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
+
 .langgraph_api
 
 *.db
 *.faiss
 qdrant_data
+
+trader_env
+vector_store
+
+

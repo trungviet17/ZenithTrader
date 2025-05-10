@@ -1,7 +1,10 @@
 {
-  "dependencies": ["."],
-  "graphs": {
-    "agent": "./src/modules/reflection/low_level/agent.py:graph"
-  },
-  "env": ".env"
+
+    "dependencies": ["./agent"],
+    "graphs": {
+      "agent": "./agent/main_agent.py:graph"
+    },
+    "env": ".env"
 }
+
+
