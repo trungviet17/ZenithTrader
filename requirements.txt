@@ -1,4 +1,9 @@
 
+fastapi
+langgraph
+faiss-cpu
+sortedcontainers
+
 langchain-community==0.3.23
 langgraph-api==0.2.19
 langgraph-cli==0.2.8
@@ -9,3 +14,4 @@ pysocks==1.7.1
 ruamel.yaml==0.17.21
 tomli==2.0.1
 yfinance==0.2.59
+
