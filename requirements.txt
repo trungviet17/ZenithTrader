@@ -1,105 +1,17 @@
-aiohappyeyeballs==2.6.1
-aiohttp==3.11.18
-aiosignal==1.3.2
-anaconda-anon-usage @ file:///croot/anaconda-anon-usage_1710965072196/work
-annotated-types==0.7.0
-anyio==4.9.0
-archspec @ file:///croot/archspec_1709217642129/work
-attrs==25.3.0
-beautifulsoup4==4.13.4
-blockbuster==1.5.24
-boltons @ file:///work/perseverance-python-buildout/croot/boltons_1698851177130/work
-Brotli @ file:///croot/brotli-split_1714483155106/work
-certifi @ file:///croot/certifi_1725551672989/work/certifi
-cffi @ file:///croot/cffi_1714483155441/work
-charset-normalizer @ file:///croot/charset-normalizer_1721748349566/work
-click==8.1.8
-cloudpickle==3.1.1
-conda @ file:///croot/conda_1722004606466/work
-conda-content-trust @ file:///croot/conda-content-trust_1714483159009/work
-conda-libmamba-solver @ file:///croot/conda-libmamba-solver_1721662679737/work/src
-conda-package-handling @ file:///croot/conda-package-handling_1718138267740/work
-conda_package_streaming @ file:///croot/conda-package-streaming_1718136078615/work
-cryptography @ file:///croot/cryptography_1714660666131/work
-curl_cffi==0.10.0
-dataclasses-json==0.6.7
-distro @ file:///croot/distro_1714488253808/work
-forbiddenfruit==0.1.4
-frozendict @ file:///croot/frozendict_1713194832637/work
-frozenlist==1.6.0
-greenlet==3.2.2
-h11==0.16.0
-httpcore==1.0.9
-httpx==0.28.1
-httpx-sse==0.4.0
-idna @ file:///croot/idna_1714398848350/work
-jsonpatch @ file:///croot/jsonpatch_1714483231291/work
-jsonpointer==2.1
-jsonschema_rs==0.29.1
-langchain==0.3.25
+anaconda-anon-usage==0.4.4
+backports.tarfile==1.2.0
+brotli==1.0.9
+conda-content-trust==0.2.0
+importlib-metadata==8.0.0
+importlib-resources==6.4.0
+jaraco.text==3.12.1
 langchain-community==0.3.23
-langchain-core==0.3.59
-langchain-text-splitters==0.3.8
-langgraph==0.4.3
 langgraph-api==0.2.19
-langgraph-checkpoint==2.0.25
 langgraph-cli==0.2.8
-langgraph-prebuilt==0.1.8
-langgraph-runtime-inmem==0.0.10
-langgraph-sdk==0.1.66
-langsmith==0.3.42
-libmambapy @ file:///croot/mamba-split_1714483352891/work/libmambapy
-marshmallow==3.26.1
-menuinst @ file:///croot/menuinst_1723567589013/work
-multidict==6.4.3
-multitasking==0.0.11
-mypy_extensions==1.1.0
-newsapi==0.1.1
-numpy==2.2.5
-orjson==3.10.18
-ormsgpack==1.9.1
-packaging @ file:///croot/packaging_1720101850331/work
-pandas==2.2.3
-peewee==3.18.1
-platformdirs @ file:///work/perseverance-python-buildout/croot/platformdirs_1701732573265/work
-pluggy @ file:///work/perseverance-python-buildout/croot/pluggy_1698805497733/work
-propcache==0.3.1
-protobuf==5.29.4
-pycosat @ file:///croot/pycosat_1714510623388/work
-pycparser @ file:///tmp/build/80754af9/pycparser_1636541352034/work
-pydantic==2.11.4
-pydantic-settings==2.9.1
-pydantic_core==2.33.2
-PyJWT==2.10.1
-PySocks @ file:///work/perseverance-python-buildout/croot/pysocks_1698845478203/work
-python-dateutil==2.9.0.post0
-python-dotenv==1.1.0
-pytz==2025.2
-PyYAML==6.0.2
-requests @ file:///croot/requests_1721410876868/work
-requests-toolbelt==1.0.0
-ruamel.yaml @ file:///work/perseverance-python-buildout/croot/ruamel.yaml_1698863605521/work
-setuptools==72.1.0
-six==1.17.0
-sniffio==1.3.1
-soupsieve==2.7
-SQLAlchemy==2.0.40
-sse-starlette==2.1.3
-starlette==0.46.2
-structlog==25.3.0
-tenacity==9.1.2
-tqdm @ file:///croot/tqdm_1716395931952/work
-truststore @ file:///work/perseverance-python-buildout/croot/truststore_1701735771625/work
-typing-inspect==0.9.0
-typing-inspection==0.4.0
-typing_extensions==4.13.2
-tzdata==2025.2
-urllib3 @ file:///croot/urllib3_1718912636303/work
-uvicorn==0.34.2
-watchfiles==1.0.5
-websockets==15.0.1
-wheel==0.43.0
-xxhash==3.5.0
-yarl==1.20.0
+newsapi-python==0.2.7
+ordered-set==4.1.0
+pip-chill==1.0.3
+pysocks==1.7.1
+ruamel.yaml==0.17.21
+tomli==2.0.1
 yfinance==0.2.59
-zstandard==0.23.0
