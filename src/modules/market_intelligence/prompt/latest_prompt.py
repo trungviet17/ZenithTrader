@@ -7,16 +7,15 @@ from langchain.prompts import PromptTemplate
 from modules.market_intelligence.prompt.general_prompt import system_prompt, task_description, market_intelligence_effect_prompt
 from server.schema import AssetData
 
-
 latest_outputformat = """
     Please ONLY return a valid JSON object. You MUST FOLLOW the JSON output format as follows:  
     {{
         "analysis": "ID: 000001 - Analysis that you provided for market intelligence 000001. ID: 000002 - Analysis that you provided for market intelligence 000002...",
         "summary": "The summary that you provided.",
         "query": {{
-            "short_term_query": "Query text that you provided for SHORT-TERM.",
-            "medium_term_query": "Query text that you provided for MEDIUM-TERM.",
-            "long_term_query": "Query text that you provided for LONG-TERM."
+            "short_term_query": "Query text that contains keywords for searching market intelligence with SHORT-TERM effects (hours to days), focusing on immediate price movements and immediate market reactions.",
+            "medium_term_query": "Query text that contains keywords for searching market intelligence with MEDIUM-TERM effects (weeks to months), focusing on quarterly performance and mid-range business developments.",
+            "long_term_query": "Query text that contains keywords for searching market intelligence with LONG-TERM effects (months to years), focusing on strategic changes, industry shifts, and fundamental business transformations."
         }}
     }}
 """

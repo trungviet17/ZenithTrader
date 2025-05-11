@@ -7,6 +7,7 @@ from modules.market_intelligence.tools import MarketSearchingTools
 from server.schema import AssetData
 from langchain_google_genai import ChatGoogleGenerativeAI
 from modules.market_intelligence.tools import get_tools
+from modules.utils.llm import LLM
 from typing import Union , Type
 from modules.market_intelligence.state import LatestMarketOutput, PastMarketOutput, MarketQuery 
 from langchain_chroma import Chroma
@@ -109,9 +110,8 @@ def get_latest_information(data: AssetData) -> str:
     idx = 0 
     
     vector_store = Chroma(
-        embedding_function = GoogleGenerativeAIEmbeddings(model = "models/text-embedding-004", google_api_key = GEMINI_API_KEY),
-        persist_directory = "agent/market_intelligence/vector_store",
-        collection_name = "market_intelligence"
+        embedding_function = LLM.get_gemini_embedding(), 
+        persist_directory = "market_intelligence/vector_store",
     )
 
     # get financial report 
@@ -122,7 +122,7 @@ def get_latest_information(data: AssetData) -> str:
     result += f"ID :{idx} " + financial_report + "\n\n"
     idx += 1
 
-    # # get sentiment news 
+    # get sentiment news 
     # sentiments_news = tools.sentiment_analysis_tool(ticker = data.asset_symbol, 
     #                                                 limit = 5 )
     # result  += "Sentiment Analysis\n"

@@ -137,12 +137,27 @@ def run_market_intelligence_agent(symbol: str, data: AssetData, testing = True) 
 
 
 
-if __name__ == "__main__":
+# if __name__ == "__main__":
 
-    symbol = "AAPL"
-    past_market_analysis, latest_market_analysis = run_market_intelligence_agent(symbol)
-    print("Past Market Analysis: ", past_market_analysis)
-    print("Latest Market Analysis: ", latest_market_analysis)
+#     symbol = "AAPL"
+
+#     asset_data = AssetData(
+#         asset_symbol='AAPL',
+#         asset_name='Apple Inc',
+#         asset_type='Common Stock',
+#         asset_exchange='NASDAQ',
+#         asset_sector='TECHNOLOGY',
+#         asset_industry='ELECTRONIC COMPUTERS',
+#         asset_description="Apple Inc. is an American multinational technology company that specializes in consumer electronics, computer software, and online services. Apple is the world's largest technology company by revenue (totalling $274.5 billion in 2020) and, since January 2021, the world's most valuable company. As of 2021, Apple is the world's fourth-largest PC vendor by unit sales, and fourth-largest smartphone manufacturer. It is one of the Big Five American information technology companies, along with Amazon, Google, Microsoft, and Facebook."
+#     )
+
+
+#     past_market_analysis, latest_market_analysis = run_market_intelligence_agent(symbol, )
+#     print("Past Market Analysis: ", past_market_analysis)
+#     print("Latest Market Analysis: ", latest_market_analysis)
+
+
+graph = create_market_intelligence_agent()
 
 
 

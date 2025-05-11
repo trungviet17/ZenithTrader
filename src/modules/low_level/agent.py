@@ -358,23 +358,21 @@ tool_node = ToolNode(tools)
 llm_with_tools = llm.bind_tools(tools=tools, tool_choice="auto")
 
 # --- Hàm tiện ích ---
-def save_to_vectorstore(analysis_text: str, symbol: str, market_context: Optional[str]) -> str:
+def save_to_vectorstore(analysis_text: str, symbol: str, market_data: Optional[str]) -> str:
     now_utc = datetime.now(pytz.UTC)
     doc_id = str(uuid4())
     metadata = {
         "doc_id": doc_id,
-         "symbol": symbol,
+        "symbol": symbol,
         "analysis_date_utc": now_utc.isoformat(),
-        "market_context_summary": market_context[:200] if market_context else "N/A",
+        "market_data_summary": market_data[:200] if market_data else "N/A",
     }
-
-    content_to_embed = f"Mã CP: {symbol}\nBối cảnh thị trường: {market_context}\n\nPhân tích kỹ thuật:\n{analysis_text}"
-
+    content_to_embed = f"Stock Symbol: {symbol}\nMarket context: {market_data}\n\nTechnical analysis:\n{analysis_text}"
     try:
         vector_store.add_documents(documents=[Document(page_content=content_to_embed, metadata=metadata)], ids=[doc_id])
-        return f"Đã lưu phân tích vào vector store (ID: {doc_id})"
+        return f"Analysis saved to vector store (ID: {doc_id})"
     except Exception as e:
-        return f"Lỗi khi lưu phân tích vào vector store: {e}"
+        return f"Error saving analysis to vector store: {e}"
 
 # --- Các Node của Graph ---
 def generate_initial_response(state: ReflectionState) -> ReflectionState:
@@ -386,22 +384,22 @@ def generate_initial_response(state: ReflectionState) -> ReflectionState:
         [
             (
                 "system",
-                """Bạn là một chuyên gia phân tích kỹ thuật thị trường tài chính. Nhiệm vụ của bạn là cung cấp phân tích kỹ thuật chuyên sâu cho mã chứng khoán dựa trên bối cảnh thị trường.
+                """You are a financial market technical analysis expert. Your task is to provide in-depth technical analysis for a stock symbol based on market context.
 
-                Yêu cầu:
-                1. Phân tích các chỉ báo kỹ thuật chính (MA, RSI, MACD, Bollinger Bands, Volume Profile).
-                2. Nhận diện mẫu giá (Doji, Double Top/Bottom), xu hướng ngắn hạn và dài hạn.
-                3. Xác định các vùng hỗ trợ, kháng cự, vùng giá trị (value area) và điểm kiểm soát (POC).
-                4. Đánh giá tâm lý thị trường (dựa trên VIX hoặc các yếu tố khác).
-                5. Đưa ra dự báo ngắn hạn (1-2 tuần) rõ ràng, dựa trên các tín hiệu kỹ thuật.
-                6. Định dạng đầu ra:
-                   - Tóm tắt chỉ báo kỹ thuật.
-                   - Mẫu giá và xu hướng.
-                   - Hỗ trợ, kháng cự, vùng giá trị.
-                   - Tâm lý thị trường.
-                   - Dự báo ngắn hạn.
-                   - Tối đa 300 từ, ngắn gọn, mạch lạc.
-                7. Sử dụng các công cụ:
+                Requirements:
+                1. Analyze key technical indicators (MA, RSI, MACD, Bollinger Bands, Volume Profile).
+                2. Identify price patterns (Doji, Double Top/Bottom), short-term and long-term trends.
+                3. Determine support, resistance zones, value areas and point of control (POC).
+                4. Evaluate market sentiment (based on VIX or other factors).
+                5. Provide clear short-term forecast (1-2 weeks), based on technical signals.
+                6. Output format:
+                   - Summary of technical indicators.
+                   - Price patterns and trends.
+                   - Support, resistance, value areas.
+                   - Market sentiment.
+                   - Short-term forecast.
+                   - Maximum 300 words, concise and coherent.
+                7. Use tools:
                    - calculate_technical_indicators
                    - analyze_patterns_trends
                    - analyze_volume_profile
@@ -410,7 +408,7 @@ def generate_initial_response(state: ReflectionState) -> ReflectionState:
             MessagesPlaceholder(variable_name="messages"),
             (
                 "user",
-                """Phân tích kỹ thuật cho mã chứng khoán {symbol}, dựa trên bối cảnh thị trường: {market_context}."""
+                """Provide technical analysis for {symbol}, based on market context: {market_context}."""
             ),
         ]
     )
@@ -432,23 +430,23 @@ def generate_initial_response(state: ReflectionState) -> ReflectionState:
     else:
         analysis_content = analysis_message.content
         prompt_critique = f"""
-            Đánh giá phân tích kỹ thuật cho {symbol}:
-            - Phân tích: {analysis_content}
-            - Bối cảnh thị trường: {market_context}
-            Yêu cầu:
-            1. Đánh giá tính chính xác, đầy đủ và logic của phân tích.
-            2. Xác định 1-2 điểm mạnh và 1-2 điểm yếu.
-            Đầu ra: Tối đa 100 từ, ngắn gọn, rõ ràng.
+            Evaluate the technical analysis for {symbol}:
+            - Analysis: {analysis_content}
+            - Market context: {market_context}
+            Requirements:
+            1. Evaluate the accuracy, completeness and logic of the analysis.
+            2. Identify 1-2 strengths and 1-2 weaknesses.
+            Output: Maximum 100 words, concise and clear.
             """
         critique_message = llm.invoke(prompt_critique)
         critique_content = critique_message.content
 
         prompt_query = f"""
-            Tạo câu hỏi truy vấn tìm kiếm lịch sử phân tích kỹ thuật cho {symbol} dựa trên:
-            - Phân tích: {analysis_content}
-            - Đánh giá: {critique_content}
-            Yêu cầu: Truy vấn cụ thể, tập trung vào các chỉ báo (RSI, MACD, MA), mẫu giá, và vùng giá trị chính.
-            Đầu ra: Tối đa 50 từ.
+            Create a query to search for historical technical analysis for {symbol} based on:
+            - Analysis: {analysis_content}
+            - Evaluation: {critique_content}
+            Requirements: Specific query focusing on indicators (RSI, MACD, MA), price patterns, and key value areas.
+            Output: Maximum 50 words.
             """
         query_message = llm.invoke(prompt_query)
         query_content = query_message.content
@@ -459,7 +457,7 @@ def generate_initial_response(state: ReflectionState) -> ReflectionState:
             "critique": critique_content,
             "query": query_content,
             "reflection_iteration": 0,
-            "messages": messages + [AIMessage(content=f"Phân tích kỹ thuật cho {symbol}:\n{analysis_content}")]
+            "messages": messages + [AIMessage(content=f"Technical analysis for {symbol}:\n{analysis_content}")]
         }
 
 def retrieve_historical(state: ReflectionState) -> ReflectionState:
@@ -468,12 +466,12 @@ def retrieve_historical(state: ReflectionState) -> ReflectionState:
     messages = state["messages"]
 
     if not query:
-        return {**state, "reflection_data": "Không có truy vấn reflection."}
+        return {**state, "reflection_data": "No reflection query available."}
 
     enhanced_query = f"{query} {symbol}"
     try:
         retrieved_docs = retriever.invoke(enhanced_query)
-        insights = f"Không tìm thấy lịch sử liên quan đến: '{query}'."
+        insights = f"No history found related to: '{query}'."
         if retrieved_docs:
             insights_list = []
             for i, doc in enumerate(retrieved_docs):
@@ -482,14 +480,14 @@ def retrieve_historical(state: ReflectionState) -> ReflectionState:
                 insights_list.append(
                     f"Insight {i+1} ({metadata.get('symbol', 'N/A')}, {metadata.get('analysis_date_utc', '?')}):\n{content_preview}"
                 )
-            insights = f"Tìm thấy {len(retrieved_docs)} phân tích lịch sử liên quan '{query}':\n\n" + "\n\n".join(insights_list)
+            insights = f"Found {len(retrieved_docs)} historical analyses related to '{query}':\n\n" + "\n\n".join(insights_list)
     except Exception as e:
-        insights = f"Lỗi khi truy xuất lịch sử: {e}"
+        insights = f"Error retrieving history: {e}"
 
     return {
         **state,
         "reflection_data": insights,
-        "messages": messages + [AIMessage(content=f"Kết quả truy vấn lịch sử:\n{insights}")]
+        "messages": messages + [AIMessage(content=f"History query results:\n{insights}")]
     }
 
 def revisor_analysis(state: ReflectionState) -> ReflectionState:
@@ -502,48 +500,48 @@ def revisor_analysis(state: ReflectionState) -> ReflectionState:
     iteration = state["reflection_iteration"]
 
     prompt_analysis = f"""
-        Tinh chỉnh phân tích kỹ thuật cho {symbol} dựa trên:
-        - Phân tích ban đầu: {response}
-        - Đánh giá: {critique}
-        - Lịch sử: {reflection_data}
-        Yêu cầu:
-        1. Cải thiện phân tích theo đánh giá và lịch sử.
-        2. Đảm bảo tính chính xác, đầy đủ, và phù hợp với bối cảnh thị trường.
-        3. Giữ định dạng: tóm tắt chỉ báo, mẫu giá, hỗ trợ/kháng cự, tâm lý, dự báo.
-        Đầu ra: Tối đa 300 từ.
+        Refine the technical analysis for {symbol} based on:
+        - Initial analysis: {response}
+        - Evaluation: {critique}
+        - History: {reflection_data}
+        Requirements:
+        1. Improve the analysis based on evaluation and history.
+        2. Ensure accuracy, completeness, and relevance to market context.
+        3. Maintain format: indicator summary, patterns, support/resistance, sentiment, forecast.
+        Output: Maximum 300 words.
         """
     refined_analysis_message = llm.invoke(prompt_analysis)
     refined_analysis_content = refined_analysis_message.content
 
     prompt_critique = f"""
-        Đánh giá phân tích kỹ thuật đã tinh chỉnh cho {symbol}:
-        - Phân tích: {refined_analysis_content}
-        Yêu cầu:
-        1. Đánh giá tính chính xác, đầy đủ, và logic.
-        2. Xác định 1-2 điểm mạnh và 1-2 điểm yếu.
-        Đầu ra: Tối đa 100 từ.
+        Evaluate the refined technical analysis for {symbol}:
+        - Analysis: {refined_analysis_content}
+        Requirements:
+        1. Evaluate accuracy, completeness, and logic.
+        2. Identify 1-2 strengths and 1-2 weaknesses.
+        Output: Maximum 100 words.
         """
     refined_critique_message = llm.invoke(prompt_critique)
     refined_critique_content = refined_critique_message.content
 
     prompt_query = f"""
-        Tạo câu hỏi truy vấn tìm kiếm lịch sử cho phân tích kỹ thuật đã tinh chỉnh của {symbol}:
-        - Phân tích: {refined_analysis_content}
-        - Đánh giá: {refined_critique_content}
-        Yêu cầu: Truy vấn cụ thể, tập trung vào các chỉ báo, mẫu giá, và vùng giá trị.
-        Đầu ra: Tối đa 50 từ.
+        Create a query to search for history for the refined technical analysis of {symbol}:
+        - Analysis: {refined_analysis_content}
+        - Evaluation: {refined_critique_content}
+        Requirements: Specific query focusing on indicators, price patterns, and value areas.
+        Output: Maximum 50 words.
         """
     refined_query_message = llm.invoke(prompt_query)
     refined_query_content = refined_query_message.content
 
     prompt_references = f"""
-        Tạo danh sách tài liệu tham khảo được sử dụng cho phân tích kỹ thuật đã tinh chỉnh của {symbol}:
-        - Phân tích: {refined_analysis_content}
-        - Lịch sử: {reflection_data}
-        Yêu cầu: Liệt kê các nguồn dữ liệu được sử dụng từ lịch sử theo mẫu:
-        - [1]: [Mô tả ngắn gọn về nội dung]
-        - Đảm bảo tính chính xác và liên quan đến phân tích.
-        Đầu ra: Tối đa 50 từ.
+        Create a list of references used for the refined technical analysis of {symbol}:
+        - Analysis: {refined_analysis_content}
+        - History: {reflection_data}
+        Requirements: List data sources used from history in the format:
+        - [1]: [Brief description of content]
+        - Ensure accuracy and relevance to the analysis.
+        Output: Maximum 50 words.
         """
     refined_references_message = llm.invoke(prompt_references)
     refined_references_content = refined_references_message.content
@@ -555,7 +553,7 @@ def revisor_analysis(state: ReflectionState) -> ReflectionState:
         "query": refined_query_content,
         "references": refined_references_content,
         "reflection_iteration": iteration + 1,
-        "messages": messages + [AIMessage(content=f"Phân tích đã tinh chỉnh (Iter {iteration + 1}):\n{refined_analysis_content}")]
+        "messages": messages + [AIMessage(content=f"Refined analysis (Iter {iteration + 1}):\n{refined_analysis_content}")]
     }
 
 def format_final_output(state: ReflectionState) -> ReflectionState:
@@ -565,18 +563,18 @@ def format_final_output(state: ReflectionState) -> ReflectionState:
     messages = state["messages"]
 
     if not final_analysis:
-        output = f"Không thể hoàn thành phân tích (3 tháng) cho {symbol} do thiếu dữ liệu."
+        output = f"Unable to complete technical analysis (3 months) for {symbol} due to insufficient data."
         return {**state, "final_output": output, "messages": messages + [AIMessage(content=output)]}
 
     save_to_vectorstore(final_analysis, symbol, market_context)
 
     output = f"""
-        # Phân tích Kỹ thuật {symbol}
-        **Ngày phân tích:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-        **Bối cảnh Thị trường:**  
+        # Technical Analysis for {symbol}
+        **Analysis Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+        **Market Context:**  
         {market_context}
 
-        ## Phân tích Chi tiết
+        ## Detailed Analysis
         {final_analysis}
         """
 
@@ -625,7 +623,7 @@ def build_workflow():
 
 def low_level_agent(symbol: str, market_context: Optional[str], max_reflections: int = 2):
     initial_state = {
-        "messages": [HumanMessage(content=f"Phân tích kỹ thuật {symbol}.")],
+        "messages": [HumanMessage(content=f"Technical analysis for {symbol}.")],
         "symbol": symbol,
         "market_context": market_context,
         "response": "",
@@ -647,10 +645,10 @@ graph = build_workflow()
 if __name__ == "__main__":
     symbol_to_analyze = "AAPL"
     market_context = (
-        f"Bối cảnh Thị trường cho {symbol_to_analyze}:\n"
-        f"- Tổng quan: Thị trường chung có xu hướng đi ngang trong vài tuần qua.\n"
-        f"- Ngành: Công nghệ đang có dấu hiệu tích lũy.\n"
-        f"- Tin tức: Không có tin tức trọng yếu nào gần đây ảnh hưởng đến giá."
+        f"Market context for {symbol_to_analyze}:\n"
+        f"- Overview: General market has been moving sideways for the past few weeks.\n"
+        f"- Sector: Technology is showing signs of accumulation.\n"
+        f"- News: No significant news recently affecting the price."
     )
     max_reflections = 2
 

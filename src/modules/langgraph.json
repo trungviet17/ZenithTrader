@@ -1,7 +1,7 @@
 {
   "dependencies": ["."],
   "graphs": {
-    "agent": "./finagent_system.py:graph"
+    "agent": "./market_intelligence/graph.py:graph"
   },
   "env": ".env"
 }
