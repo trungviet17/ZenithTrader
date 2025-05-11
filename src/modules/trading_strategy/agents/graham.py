@@ -316,7 +316,7 @@ def create_graham_agent() :
     return workflow.compile()
 
 
-def run_graham_analysis(ticker: str, end_date: str = None) -> Dict:
+def run_graham_analysis(ticker: str, end_date: str = None) -> str:
     """Run Benjamin Graham analysis for a given ticker."""
 
     graham_agent = create_graham_agent()
@@ -328,5 +328,14 @@ def run_graham_analysis(ticker: str, end_date: str = None) -> Dict:
     # Run the agent
     final_state = graham_agent.invoke(initial_state)
     
-    # Return the final state
-    return final_state.get("output_signal", None)
+    result = final_state.get("output_signal", None)
+
+
+    output = "Analysis Graham trading strategy\n"
+    output += f"Signal {result.get('signal', None)} \n"
+    output += f"Confidence {result.get('confidence', None)} \n"
+    output += f"Reasoning {result.get('reasoning', None)} \n"
+
+
+
+    return output

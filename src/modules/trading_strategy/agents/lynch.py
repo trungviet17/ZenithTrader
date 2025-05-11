@@ -76,39 +76,7 @@ def fetch_financial_data(state: LynchState) -> LynchState:
         
         # Check for line items file and load if exists
         # Lynch focused on growth metrics
-        line_items_to_search = [
-            "revenue",
-            "net_income",
-            "outstanding_shares",
-            "research_and_development",
-            "capital_expenditure", 
-            "cash_and_cash_equivalents",
-            "inventory",
-            "total_assets"
-        ]
         
-        if os.path.exists(line_items_file):
-            with open(line_items_file, 'r') as f:
-                financial_line_items = json.load(f)
-                financial_line_items = financial_line_items.get('search_results', [])
-                state.messages.append({
-                    "role": "assistant", 
-                    "content": f"Loaded line items from file for {ticker}"
-                })
-        else:
-            # Fall back to API call
-            financial_line_items = search_line_items(
-                ticker,
-                line_items_to_search,
-                end_date,
-            )['search_results']
-
-            with open(line_items_file, 'w') as f:
-                json.dump({"search_results": financial_line_items}, f)
-                state.messages.append({
-                    "role": "assistant", 
-                    "content": f"Fetched line items from API for {ticker}"
-                })
         
         # Get market cap
         market_cap = metrics[0].get("market_cap", 0) if metrics else 0
@@ -118,12 +86,7 @@ def fetch_financial_data(state: LynchState) -> LynchState:
         
         # Update state
         state.metrics = metrics
-        state.financial_line_items = financial_line_items
-        state.current_step = "analyze_growth"
-        state.market_cap = market_cap
-
-        state.metrics = metrics
-        state.financial_line_items = financial_line_items
+    
         state.current_step = "analyze_financials"
         state.market_cap = market_cap
         state.industry_data = industry_data
@@ -155,33 +118,30 @@ def analyze_financials(state: LynchState) -> LynchState:
     try:
         # Run all analyses
         metrics = state.metrics
-        financial_line_items = state.financial_line_items
         
-        # Growth analysis (most critical for Lynch)
         growth_analysis = analyze_growth(metrics)
         
-        # PEG ratio analysis (Lynch's favorite metric)
+       
         peg_analysis = analyze_peg_ratio(metrics)
         
-        # Competitive advantage analysis
+     
         competitive_advantage = analyze_competitive_advantage(metrics)
         
-        # Calculate business category from growth analysis
+     
         business_category = growth_analysis.get("category")
         
-        # Check institutional ownership (Lynch often looked for under-followed stocks)
-        # For demo purposes, we'll set a placeholder value
-        institutional_ownership = 0.45  # Would fetch from actual data source in production
         
-        # Calculate total score
+        institutional_ownership = 0.45  
+        
+      
         total_score = (
             growth_analysis.get("score", 0) + 
             peg_analysis.get("score", 0) + 
             competitive_advantage.get("score", 0)
         )
         
-        # Maximum possible score
-        max_score = 15  # Sum of maximum scores from all analyses
+       
+        max_score = 15
         
         # Update state
         state.growth_analysis = growth_analysis
@@ -351,7 +311,7 @@ def create_lynch_agent() :
     return workflow.compile()
 
 
-def run_lynch_analysis(ticker: str, end_date: str = None) -> Dict:
+def run_lynch_analysis(ticker: str, end_date: str = None) -> str:
     """Run Warren Buffett analysis for a given ticker."""
 
     agent = create_lynch_agent()
@@ -363,5 +323,14 @@ def run_lynch_analysis(ticker: str, end_date: str = None) -> Dict:
     # Run the agent
     final_state = agent.invoke(initial_state)
     
-    # Return the final state
-    return final_state.get("output_signal", None)
+    result = final_state.get("output_signal", None)
+
+
+    output = "Analysis Graham trading strategy\n"
+    output += f"Signal {result.get('signal', None)} \n"
+    output += f"Confidence {result.get('confidence', None)} \n"
+    output += f"Reasoning {result.get('reasoning', None)} \n"
+
+
+
+    return output

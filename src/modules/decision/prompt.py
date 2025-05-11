@@ -73,8 +73,8 @@ output_format = """
     {
         "reasoning": "Reason that you provided",
         "action": "BUY/HOLD/SELL",
-        "quantity" : "The quantity of the asset you want to buy/sell",
-        "price" : "The price of the asset you want to buy/sell",
+        "quantity" : "The quantity of the asset you want to buy/sell must be a positive integer not less than 0",
+        "price" : "The price of the asset you want to buy/sell must be a positive float not less than 0",
         "exchange_name": "The exchange name of the asset you want to buy/sell",
         "symbol": "The symbol of the asset you want to buy/sell",
         "confidence": "The confidence of the decision you made in range of 0 to 1",
@@ -126,76 +126,77 @@ def get_decision_prompt(market_intelligence: str,
                         trading_strategy: str,
                         asset_data: AssetData): 
     
-
-    task_description = task_description.format(
-        asset_name=asset_data.name,
-        asset_symbol=asset_data.symbol,
-        asset_exchange=asset_data.exchange,
-        asset_sector=asset_data.sector,
-        asset_industry=asset_data.industry,
-        asset_description=asset_data.description
+    # Format the asset data into task description first
+    task_desc = task_description.format(
+        asset_name=asset_data.asset_name,
+        asset_symbol=asset_data.asset_symbol,
+        asset_exchange=asset_data.asset_exchange,
+        asset_sector=asset_data.asset_sector,
+        asset_industry=asset_data.asset_industry,
+        asset_description=asset_data.asset_description,
     )
 
+    # Create template with ALL variables as placeholders
+    template = """
+    {system_prompt}
 
+    {task_desc}
 
-
-    decision_prompt = f"""
-        {system_prompt}
-
-        {task_description}
-
-
-        The following are analysis of the latest (i.e., today) and past (i.e., before today) market intelligence
+    The following are analysis of the latest (i.e., today) and past (i.e., before today) market intelligence
     (e.g., news, financial reports) you've provided.
 
-        The following is a analysis from your assistant of the past market intelligence and the latest market intelligence
-            {market_intelligence}
+    The following is a analysis from your assistant of the past market intelligence and the latest market intelligence
+        {market_intelligence}
 
-        The analysis of price movements provided by your assistant across three time horizons: Short-Term, Medium-Term, and Long-Term.
-        Past analysis and Latest analysis of price movements are as follows:
-        +  {low_level_reflection}
-        
-        Please consider these reflections, identify the potential price movements patterns and characteristics of this
+    The analysis of price movements provided by your assistant across three time horizons: Short-Term, Medium-Term, and Long-Term.
+    Past analysis and Latest analysis of price movements are as follows:
+      {low_level_reflection}
+    
+    Please consider these reflections, identify the potential price movements patterns and characteristics of this
     particular stock and incorporate these insights into your further analysis and reflections when applicable.
 
-        As follows are the analysis provided by your assistant about the reflection on the trading decisions you
+    As follows are the analysis provided by your assistant about the reflection on the trading decisions you
     made during the trading processs, and evaluating if they were correct or incorrect, and considering if there are
     opportunities for optimization to achieve maximum returns.
-        Past and Latest reflections on the trading decisions are as follows:
-            {high_level_reflection}
+    Past and Latest reflections on the trading decisions are as follows:
+        {high_level_reflection}
 
-        Below are some decisions, market analyses from professional investors, and reasoning for their actions and analyses. You can use 
-        these as reference to make your final investment decision:
+    Below are some decisions, market analyses from professional investors, and reasoning for their actions and analyses. You can use 
+    these as reference to make your final investment decision:
 
-        {trading_strategy}
+    {trading_strategy}
 
+    {output_rules}
 
-        {output_rules}
-
-        {output_format}
-
+    {output_format}
     """
 
-
-
-    return PromptTemplate(
-        template = decision_prompt,
+    # Create the prompt template with ALL variables
+    prompt = PromptTemplate(
+        template=template,
         input_variables=[
-            
+            "system_prompt",
+            "task_desc",
             "market_intelligence",
             "low_level_reflection",
             "high_level_reflection",
             "trading_strategy",
+            "output_rules",
+            "output_format"
         ],
+    )
 
-    ).format(
+    # Format with ALL variables at once
+    return prompt.format(
+        system_prompt=system_prompt,
+        task_desc=task_desc,
         market_intelligence=market_intelligence,
         low_level_reflection=low_level_reflection,
         high_level_reflection=high_level_reflection,
         trading_strategy=trading_strategy,
-        
+        output_rules=output_rules,
+        output_format=output_format
     )
-
 
 
 

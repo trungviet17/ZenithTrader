@@ -359,7 +359,7 @@ def create_buffett_agent() :
     return workflow.compile()
 
 # Function to run the agent with a ticker
-def run_buffett_analysis(ticker: str, end_date: str = None) -> Dict:
+def run_buffett_analysis(ticker: str, end_date: str = None) -> str:
     """Run Warren Buffett analysis for a given ticker."""
 
     buffett_agent = create_buffett_agent()
@@ -372,7 +372,17 @@ def run_buffett_analysis(ticker: str, end_date: str = None) -> Dict:
     final_state = buffett_agent.invoke(initial_state)
     
     # Return the final state
-    return final_state.get("output_signal", None)
+    result = final_state.get("output_signal", None)
+    print(f"type of result: {type(result)}")
+
+    output = "Analysis Warent Buffett trading strategy\n"
+    output += f"Signal {result.get('signal', None)} \n"
+    output += f"Confidence {result.get('confidence', None)} \n"
+    output += f"Reasoning {result.get('reasoning', None)} \n"
+
+
+
+    return output
 
 
 
@@ -386,4 +396,5 @@ if __name__ == "__main__":
     result = run_buffett_analysis(ticker, end_date)
     
     # Print the result
-    pprint(result)
+    print(result)
+    

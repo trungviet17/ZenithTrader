@@ -27,7 +27,7 @@ def initialize_state(state: RiskManagerState) -> RiskManagerState:
     if trade_decision.symbol == "":
         raise ValueError("Symbol is required.")
 
-    if trade_decision.action not in ["buy", "sell", "hold"]:
+    if trade_decision.action not in ["BUY", "SELL", "HOLD"]:
         raise ValueError(f"Invalid action: {trade_decision.action}. Must be 'buy', 'sell', or 'hold'.")
 
     if trade_decision.quantity <= 0:

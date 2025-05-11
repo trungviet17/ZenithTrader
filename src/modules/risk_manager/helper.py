@@ -19,11 +19,18 @@ class RiskManagerParser(BaseOutputParser):
             text = re.sub(r'[\x00-\x1F\x7F-\x9F]', ' ', text)
             data = json.loads(text)
 
+            
+            # Extract and clean price value if it's a string
+            price_value = data.get("price", 0.0)
+            if isinstance(price_value, str):
+                # Remove $ and any other non-numeric characters except decimal point
+                price_value = re.sub(r'[^\d.]', '', price_value)
+            
             trading_decision = TradeDecision(
                 symbol=data.get("symbol", ""),
                 action=data.get("action", ""),
                 quantity=data.get("quantity", 0),
-                price=data.get("price", 0.0),
+                price=float(price_value),
                 reasoning=data.get("reasoning", ""),
                 confidence=float(data.get("confidence", 0.0)),
                 agent_name="RiskManager", 

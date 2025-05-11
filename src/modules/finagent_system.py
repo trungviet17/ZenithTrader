@@ -50,7 +50,11 @@ def initialize_state(state: MasterState) -> MasterState:
         raise ValueError("Symbol không được cung cấp trong state.")
 
     if state.get("holding") is None:
-        state["holding"] = {}
+        state["holding"] = {
+            "AAPL": 10,
+            "MSFT": 5,
+            "GOOGL": 2
+        }
 
     symbol = state["symbol"]
     asset_data = AssetData(
@@ -107,7 +111,6 @@ def technical_analysis_node(state: MasterState) -> MasterState:
     return {
         **state,
         "technical_analysis": tech_state,
-        "messages": messages + tech_state
     }
 
 def high_level_reflection_node(state: MasterState) -> MasterState:
@@ -116,12 +119,38 @@ def high_level_reflection_node(state: MasterState) -> MasterState:
     technical_analysis = state["technical_analysis"]
     messages = state["messages"]
 
-    reflection_state = high_level_reflection_agent(symbol, market_data, technical_analysis, max_reflections=1)
+    sample_trade_history = [
+        {
+            "trade_id": str(uuid4()),
+            "symbol": symbol,
+            "date": "2025-02-15",
+            "action": "Buy",
+            "price": 150.0,
+            "quantity": 100,
+            "reason": "RSI gives oversold signal, positive MACD crossover.",
+            "outcome": "Profit",
+            "profit_loss": 500.0,
+            "analysis": "Correct decision as the price increased after the technical signal."
+        },
+        {
+            "trade_id": str(uuid4()),
+            "symbol": symbol,
+            "date": "2025-03-10",
+            "action": "Sell",
+            "price": 155.0,
+            "quantity": 100,
+            "reason": "Price hit strong resistance at 155, RSI overbought.",
+            "outcome": "Loss",
+            "profit_loss": -200.0,
+            "analysis": "Wrong decision as the price continued to rise after selling."
+        }
+    ]
+
+    reflection_state = high_level_reflection_agent(symbol, market_data, technical_analysis, sample_trade_history, max_reflections=1)
     
     return {
         **state,
         "improvement_data": reflection_state,
-        "messages": messages + reflection_state
     }
 
 def strategy_node(state: MasterState) -> MasterState:
@@ -133,24 +162,11 @@ def strategy_node(state: MasterState) -> MasterState:
     graham_analysis = run_graham_analysis(symbol)
     murphy_analysis = run_murphy_analysis(symbol)
 
-    all_trading_strategies = {
-        "buffett": buffett_analysis,
-        "lynch": lynch_analysis,
-        "graham": graham_analysis,
-        "murphy": murphy_analysis
-    }
 
-    strategy_state = ""
-    for strategy, analysis in all_trading_strategies.items():
-        strategy_state += f"Phân tích {strategy}:\n"
-        strategy_state += f"Signal: {analysis['signal']}\n"
-        strategy_state += f"Confidence: {analysis['confidence']}\n"
-        strategy_state += f"Reasoning: {analysis['reasoning']}\n"
-        
+    strategy_state = buffett_analysis + "\n" + lynch_analysis + "\n" + graham_analysis + "\n" + murphy_analysis
     return {
         **state,
         "trading_strategy": strategy_state,
-        "messages": messages + AIMessage(content=str(strategy_state))
     }
 
 
@@ -160,13 +176,13 @@ def risk_management_node(state: MasterState) -> MasterState:
     messages = state["messages"]
     holding = state["holding"]
 
+
     risk_reduce = run_risk_manager_agent(decision, holding)
 
     return {
         **state,
         "risk_assessment": risk_reduce[1],
         "decision": risk_reduce[0],
-        "messages": messages + AIMessage(content=str(risk_reduce[1]))
     }
 
 def decision_node(state: MasterState) -> MasterState:
@@ -181,24 +197,19 @@ def decision_node(state: MasterState) -> MasterState:
     trading_strategy = state["trading_strategy"]
 
     prompt = get_decision_prompt(
-        market_data=market_data,
-        technical_analysis=technical_analysis,
-        improvement_data=improvement_data,
-        trading_strategy=trading_strategy
+        market_intelligence=market_data,
+        low_level_reflection=technical_analysis,
+        high_level_reflection=improvement_data,
+        trading_strategy=trading_strategy, 
+        asset_data = state["asset_data"],
     )
 
-    try : 
-        decision = chain.invoke(prompt)
-        state["decision"] = decision
-        state["messages"].append(AIMessage(content=str(decision)))
-    
-    except Exception as e:
-        state["messages"].append(AIMessage(content=f"Lỗi: {e}"))
-        state["decision"] = None
-        state["final_decision"] = None
-
-
-
+    decision = chain.invoke(prompt)
+        
+    return {
+        **state,
+        "decision": decision
+    }
 
 
 
@@ -225,37 +236,6 @@ def build_master_workflow():
 
     return workflow.compile()
 
-# # --- Chạy thử nghiệm ---
-# if __name__ == "__main__":
-#     symbol_to_analyze = "AAPL"
-
-#     graph = build_master_workflow()
-
-#     initial_state = {
-#         "messages": [HumanMessage(content=f"Thực hiện quy trình giao dịch cho {symbol_to_analyze}.")],
-#         "symbol": symbol_to_analyze,
-#         "market_data": None,
-#         "technical_analysis": None,
-#         "improvement_data": None,
-#         "trading_strategy": None,
-#         "risk_assessment": None,
-#         "final_decision": None,
-#         "final_output": None,
-#     }
-
-#     print(f"\n--- Bắt đầu Master Workflow cho {symbol_to_analyze} ---")
-#     final_result_state = graph.invoke(initial_state)
-#     print(f"\n--- Master Workflow cho {symbol_to_analyze} Hoàn thành ---")
-
-#     print("\n--- Kết quả Cuối cùng ---")
-#     if final_result_state.get("final_output"):
-#         print(final_result_state["final_output"])
-#     else:
-#         print("Không có kết quả cuối cùng hoặc đã xảy ra lỗi.")
-#         if final_result_state.get("messages"):
-#             last_message = final_result_state["messages"][-1].content
-#             if "Lỗi:" in last_message:
-#                 print("\nLỗi gặp phải:", last_message)
 
 
 graph = build_master_workflow()

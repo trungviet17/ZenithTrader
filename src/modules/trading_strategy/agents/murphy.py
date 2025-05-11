@@ -308,7 +308,7 @@ def generate_signal(state: MurphyState) -> Dict:
             "role": "assistant", 
             "content": f"Error generating signal: {str(e)}"
         })
-    return state
+    return state.model_dump()
 
 
 def handle_error(state: MurphyState) -> MurphyState:
@@ -383,7 +383,7 @@ def create_murphy_agent():
     return workflow.compile()
 
 
-def run_murphy_analysis(ticker: str, end_date: str = None) -> Dict:
+def run_murphy_analysis(ticker: str, end_date: str = None) -> str:
 
 
     agent = create_murphy_agent()
@@ -395,5 +395,22 @@ def run_murphy_analysis(ticker: str, end_date: str = None) -> Dict:
     # Run the agent
     final_state = agent.invoke(initial_state)
     
-    # Return the final state
-    return final_state.get("output_signal", None)
+    result = final_state.get("output_signal", None)
+
+    print(f'type result {type(result)}')
+
+    output = "Analysis Graham trading strategy\n"
+    output += f"Signal {result.get('signal', None)} \n"
+    output += f"Confidence {result.get('confidence', None)} \n"
+    output += f"Reasoning {result.get('reasoning', None)} \n"
+
+
+
+    return output
+
+
+if __name__ == "__main__":
+    ticker = "AAPL"
+   
+    result = run_murphy_analysis(ticker)
+    print(result)
