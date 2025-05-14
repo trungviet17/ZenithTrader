@@ -24,6 +24,7 @@ ALPHA_AVANTAGE_API_KEY = os.getenv("ALPHA_AVANTAGE_API_KEY")
 
 
 
+
 class MarketSearchingTools: 
 
     def __init__(self, 
@@ -35,6 +36,7 @@ class MarketSearchingTools:
         self.tavily_api_key = tavily_api_key
         self.news_api_key = news_api_key
         self.alpha_avantage_api_key = alpha_avantage_api_key
+        
 
 
     def web_search_tool(self, query : str) -> List:
@@ -104,83 +106,129 @@ class MarketSearchingTools:
             A formatted string containing the financial report
         """
         # take income statement 
-        income_url = "https://www.alphavantage.co/query?function=INCOME_STATEMENT&symbol=" + str(ticker) + "&apikey=" + self.alpha_avantage_api_key
-        balance_url = "https://www.alphavantage.co/query?function=BALANCE_SHEET&symbol=" + str(ticker) + "&apikey=" + self.alpha_avantage_api_key
 
-        response_income = requests.get(income_url)
-        response_balance = requests.get(balance_url)
-        
-        if response_income.status_code != 200 or response_balance.status_code != 200:
-            raise Exception(f"API fetch error. Status: Income={response_income.status_code}, Balance={response_balance.status_code}")
 
-        income_data = response_income.json()
-        balance_data = response_balance.json()
+        headers = {"X-API-KEY": self.financial_datasets_api_key}
         
-        # take data by quarter and annual 
-        income_annual = income_data['annualReports'][0]
-        income_quarter = income_data['quarterlyReports'][0]
+        # Set parameters for annual data
+        annual_params = {
+            "ticker": ticker,
+            "period": "annual",
+            "limit": 5
+        }
+        
+        # Set parameters for quarterly data
+        quarterly_params = {
+            "ticker": ticker,
+            "period": "quarterly",
+            "limit": 5
+        }
+        
+        # API endpoints
+        income_url = "https://api.financialdatasets.ai/financials/income-statements"
+        balance_url = "https://api.financialdatasets.ai/financials/balance-sheets"
+        
+        # Make API requests for annual data
+        response_income_annual = requests.get(income_url, headers=headers, params=annual_params)
+        response_balance_annual = requests.get(balance_url, headers=headers, params=annual_params)
+        
+        # Make API requests for quarterly data
+        response_income_quarterly = requests.get(income_url, headers=headers, params=quarterly_params)
+        response_balance_quarterly = requests.get(balance_url, headers=headers, params=quarterly_params)
+        
+        # Check for successful responses
+        if (response_income_annual.status_code != 200 or 
+            response_balance_annual.status_code != 200 or
+            response_income_quarterly.status_code != 200 or
+            response_balance_quarterly.status_code != 200):
+            raise Exception(f"API fetch error. Status codes: Income Annual={response_income_annual.status_code}, " 
+                            f"Balance Annual={response_balance_annual.status_code}, "
+                            f"Income Quarterly={response_income_quarterly.status_code}, "
+                            f"Balance Quarterly={response_balance_quarterly.status_code}")
 
-        balance_annual = balance_data['annualReports'][0]
-        balance_quarter = balance_data['quarterlyReports'][0]
+        # Parse JSON responses
+        income_annual_data = response_income_annual.json().get('income_statements', [])
+        balance_annual_data = response_balance_annual.json().get('balance_sheets', [])
+        income_quarterly_data = response_income_quarterly.json().get('income_statements', [])
+        balance_quarterly_data = response_balance_quarterly.json().get('balance_sheets', [])
         
+        # Check if we have data
+        if not income_annual_data or not balance_annual_data:
+            return f"No annual financial data available for {ticker}"
+            
+        # Get the most recent annual data
+        income_annual = income_annual_data[0]
+        balance_annual = balance_annual_data[0]
+        
+        # Initialize formatted information with annual data
         formatted_information = f"""
-        Financial Summary for fiscal year ending {income_annual['fiscalDateEnding']}:
+        Financial Summary for fiscal period {income_annual.get('fiscal_period')} ending {income_annual.get('report_period')}:
 
             Liquidity:
-            - Cash and short-term investments: ${float(balance_annual['cashAndShortTermInvestments']) / 1e9:.2f}B
-            - Total current assets: ${float(balance_annual['totalCurrentAssets']) / 1e9:.2f}B
-            - Total current liabilities: ${float(balance_annual['totalCurrentLiabilities']) / 1e9:.2f}B
-            - Current ratio: {(float(balance_annual['totalCurrentAssets']) / float(balance_annual['totalCurrentLiabilities'])):.2f}
+            - Cash and equivalents: ${float(balance_annual.get('cash_and_equivalents', 0)) / 1e9:.2f}B
+            - Total current assets: ${float(balance_annual.get('current_assets', 0)) / 1e9:.2f}B
+            - Total current liabilities: ${float(balance_annual.get('current_liabilities', 0)) / 1e9:.2f}B
+            - Current ratio: {(float(balance_annual.get('current_assets', 0)) / float(balance_annual.get('current_liabilities', 1))):.2f}
 
             Financial Leverage:
-            - Total liabilities: ${float(balance_annual['totalLiabilities']) / 1e9:.2f}B
-            - Total assets: ${float(balance_annual['totalAssets']) / 1e9:.2f}B
-            - Debt ratio (Total Liabilities / Total Assets): {(float(balance_annual['totalLiabilities']) / float(balance_annual['totalAssets'])):.2f}
+            - Total liabilities: ${float(balance_annual.get('total_liabilities', 0)) / 1e9:.2f}B
+            - Total assets: ${float(balance_annual.get('total_assets', 0)) / 1e9:.2f}B
+            - Debt ratio (Total Liabilities / Total Assets): {(float(balance_annual.get('total_liabilities', 0)) / float(balance_annual.get('total_assets', 1))):.2f}
 
             Debt Load:
-            - Short-term debt: ${float(balance_annual['shortTermDebt']) / 1e9:.2f}B
-            - Long-term debt: ${float(balance_annual['longTermDebt']) / 1e9:.2f}B
-            - Total debt: ${(float(balance_annual['shortTermDebt']) + float(balance_annual['longTermDebt'])) / 1e9:.2f}B
-            - EBITDA: ${float(income_annual['ebitda']) / 1e9:.2f}B
-            - Debt / EBITDA: {((float(balance_annual['shortTermDebt']) + float(balance_annual['longTermDebt'])) / float(income_annual['ebitda'])):.2f} → Lower is better
+            - Current debt: ${float(balance_annual.get('current_debt', 0)) / 1e9:.2f}B
+            - Non-current debt: ${float(balance_annual.get('non_current_debt', 0)) / 1e9:.2f}B
+            - Total debt: ${float(balance_annual.get('total_debt', 0)) / 1e9:.2f}B
+            - EBIT: ${float(income_annual.get('ebit', 0)) / 1e9:.2f}B
+            - Debt / EBIT: {(float(balance_annual.get('total_debt', 0)) / float(income_annual.get('ebit', 1))):.2f} → Lower is better
 
             Shareholder Equity:
-            - Total shareholder equity: ${float(balance_annual['totalShareholderEquity']) / 1e9:.2f}B
-            - Outstanding shares: {float(balance_annual['commonStockSharesOutstanding']) / 1e6:.2f}M
-            - Book Value Per Share (BVPS): ${(float(balance_annual['totalShareholderEquity']) / float(balance_annual['commonStockSharesOutstanding'])):.2f}
+            - Total shareholder equity: ${float(balance_annual.get('shareholders_equity', 0)) / 1e9:.2f}B
+            - Outstanding shares: {float(balance_annual.get('outstanding_shares', 0)) / 1e6:.2f}M
+            - Book Value Per Share (BVPS): ${(float(balance_annual.get('shareholders_equity', 0)) / float(balance_annual.get('outstanding_shares', 1))):.2f}
 
             Income Statement Highlights:
-            - Total revenue: ${float(income_annual['totalRevenue']) / 1e9:.2f}B
-            - Gross profit: ${float(income_annual['grossProfit']) / 1e9:.2f}B
-            - Gross profit margin: {(float(income_annual['grossProfit']) / float(income_annual['totalRevenue']) * 100):.2f}%
-            - Operating income (EBIT): ${float(income_annual['operatingIncome']) / 1e9:.2f}B
-            - EBITDA: ${float(income_annual['ebitda']) / 1e9:.2f}B
-            - Net income: ${float(income_annual['netIncome']) / 1e9:.2f}B
+            - Total revenue: ${float(income_annual.get('revenue', 0)) / 1e9:.2f}B
+            - Gross profit: ${float(income_annual.get('gross_profit', 0)) / 1e9:.2f}B
+            - Gross profit margin: {(float(income_annual.get('gross_profit', 0)) / float(income_annual.get('revenue', 1)) * 100):.2f}%
+            - Operating income: ${float(income_annual.get('operating_income', 0)) / 1e9:.2f}B
+            - EBIT: ${float(income_annual.get('ebit', 0)) / 1e9:.2f}B
+            - Net income: ${float(income_annual.get('net_income', 0)) / 1e9:.2f}B
 
             R&D Spending (Innovation):
-            - Research & Development expense: ${float(income_annual['researchAndDevelopment']) / 1e9:.2f}B
+            - Research & Development expense: ${float(income_annual.get('research_and_development', 0)) / 1e9:.2f}B
 
             Interpretation Tips:
             - A current ratio above 1.0 indicates healthy short-term liquidity.
             - A debt ratio below 0.6 is typically considered low-risk.
             - BVPS can be compared to market price to assess undervaluation.
             - Strong gross margin and operating income suggest good core profitability.
-
-        Quarterly Snapshot (Quarter Ending {income_quarter['fiscalDateEnding']}):
-
-            Revenue: ${float(income_quarter['totalRevenue']) / 1e9:.2f}B
-            Net Income: ${float(income_quarter['netIncome']) / 1e9:.2f}B
-            Gross Margin: {(float(income_quarter['grossProfit']) / float(income_quarter['totalRevenue']) * 100):.2f}%
-            Operating Income (EBIT): ${float(income_quarter['operatingIncome']) / 1e9:.2f}B
-            Short-term Debt: ${float(balance_quarter['shortTermDebt']) / 1e9:.2f}B
-            Cash: ${float(balance_quarter['cashAndShortTermInvestments']) / 1e9:.2f}B
-            R&D: ${float(income_quarter['researchAndDevelopment']) / 1e9:.2f}B
-
-            Commentary:
-            - Compare quarterly net income and revenue trends with annual data to assess momentum.
-            - Look for seasonal effects, turnarounds, or deteriorations in margin or debt ratios.
         """
+        
+        # Add quarterly data if available
+        if income_quarterly_data and balance_quarterly_data:
+            income_quarter = income_quarterly_data[0]
+            balance_quarter = balance_quarterly_data[0]
+            
+            quarterly_info = f"""
+            Quarterly Snapshot (Period Ending {income_quarter.get('report_period')}):
+
+                Revenue: ${float(income_quarter.get('revenue', 0)) / 1e9:.2f}B
+                Net Income: ${float(income_quarter.get('net_income', 0)) / 1e9:.2f}B
+                Gross Margin: {(float(income_quarter.get('gross_profit', 0)) / float(income_quarter.get('revenue', 1)) * 100):.2f}%
+                Operating Income: ${float(income_quarter.get('operating_income', 0)) / 1e9:.2f}B
+                Current Debt: ${float(balance_quarter.get('current_debt', 0)) / 1e9:.2f}B
+                Cash: ${float(balance_quarter.get('cash_and_equivalents', 0)) / 1e9:.2f}B
+                R&D: ${float(income_quarter.get('research_and_development', 0)) / 1e9:.2f}B
+
+                Commentary:
+                - Compare quarterly net income and revenue trends with annual data to assess momentum.
+                - Look for seasonal effects, turnarounds, or deteriorations in margin or debt ratios.
+            """
+            formatted_information += quarterly_info
+        
         return formatted_information
+       
 
 
     def sentiment_analysis_tool(self, ticker: str, limit : int = 10, hour_ago: int = 16, is_has_hour_ago : bool = True) -> List:

@@ -397,4 +397,6 @@ if __name__ == "__main__":
     
     # Print the result
     print(result)
+
+graph = create_buffett_agent()
     

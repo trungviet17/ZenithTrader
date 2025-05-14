@@ -516,3 +516,6 @@ if __name__ == "__main__":
         max_reflections
     )
     print(result)
+
+
+graph = build_workflow()

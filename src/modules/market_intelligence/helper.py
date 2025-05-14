@@ -122,25 +122,19 @@ def get_latest_information(data: AssetData) -> str:
     result += f"ID :{idx} " + financial_report + "\n\n"
     idx += 1
 
-    # get sentiment news 
-    # sentiments_news = tools.sentiment_analysis_tool(ticker = data.asset_symbol, 
-    #                                                 limit = 5 )
-    # result  += "Sentiment Analysis\n"
-    # result += "==================\n"
-    # result += sentiments_news[0] + "\n\n"
+    sentiments_news = tools.sentiment_analysis_tool(ticker = data.asset_symbol, 
+                                                    limit = 5 )
+    result  += "Sentiment Analysis\n"
+    result += "==================\n"
+    result += sentiments_news[0] + "\n\n"
 
-    # vector_store.add_texts(texts = sentiments_news[1:], metadatas = [{"id": str(uuid4())} for _ in range(len(sentiments_news[1:]))])
+    vector_store.add_texts(texts = sentiments_news[1:], metadatas = [{"id": str(uuid4())} for _ in range(len(sentiments_news[1:]))])
 
 
-    # for news in sentiments_news[1:]:
-    #     result += f"ID :{idx} " + news + "\n\n"
-    #     idx += 1
+    for news in sentiments_news[1:]:
+        result += f"ID :{idx} " + news + "\n\n"
+        idx += 1
 
-    
-    # # get history data 
-    # history_data = tools.get_price(data.asset_symbol)
-    # result += f"ID :{idx} " + history_data + "\n\n"
-    # vector_store.add_texts(texts = [history_data], metadatas = [{"id": str(uuid4())}])
 
     return result 
 

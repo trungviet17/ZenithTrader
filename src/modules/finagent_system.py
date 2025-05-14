@@ -94,12 +94,13 @@ def market_intelligent_node(state: MasterState) -> MasterState:
         market_state += f"Latest market intelligence analysis: {analysis}\n"
     market_state += f"Latest market intelligence summary: {late_analysis.summaries}\n"
 
-
-
     return {
         **state,
         "market_data": market_state,
     }
+
+
+    
 
 def technical_analysis_node(state: MasterState) -> MasterState:
     symbol = state["symbol"]

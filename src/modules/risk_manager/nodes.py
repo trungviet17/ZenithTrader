@@ -212,4 +212,6 @@ if __name__ == "__main__":
     print(result)
 
 
+graph = create_risk_manager_agent()
+
 

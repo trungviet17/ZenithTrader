@@ -1,7 +1,7 @@
 {
   "dependencies": ["."],
   "graphs": {
-    "agent": "./finagent_system.py:graph"
+    "agent": "./risk_manager/nodes.py:graph"
   },
   "env": ".env"
 }

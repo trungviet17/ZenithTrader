@@ -654,3 +654,5 @@ if __name__ == "__main__":
 
     result = low_level_agent(symbol_to_analyze, market_context, max_reflections)
     print(result)
+
+graph = build_workflow()
