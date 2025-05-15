@@ -5,9 +5,11 @@ import numpy as np
 from typing import TypedDict, Annotated, List, Dict, Any, Literal, Optional
 from uuid import uuid4
 import json
+from pydantic import BaseModel, Field
+import os
 
 from langchain_core.tools import tool
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -18,21 +20,12 @@ from qdrant_client.http.models import Distance, VectorParams
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.graph.message import add_messages
-from modules.utils.llm import LLM
-
-from dotenv import load_dotenv
-import os 
-
-
-load_dotenv()
-
-google_api_key = os.getenv("GEMINI_API_KEY")
-
+from modules.utils.llm import LLM 
 
 # --- Khởi tạo LLM, Embeddings và Vector Store ---
-# llm = ChatOllama(model="cogito:3b")
-llm = LLM.get_gemini_llm()
+llm = LLM.get_gemini_llm(model_index = 3)
 embeddings = LLM.get_gemini_embedding()
+
 
 # --- Thiết lập Qdrant ---
 QDRANT_PATH = "./high_level/qdrant_data"
@@ -75,106 +68,26 @@ class HighLevelReflectionState(TypedDict):
 
 # --- Tools Phân tích Giao dịch ---
 @tool
-def evaluate_trade_performance(trade_history: List[Dict]) -> Dict:
-    """
-    Đánh giá hiệu suất giao dịch dựa trên lịch sử giao dịch.
+def get_current_time() -> str:
+    """Lấy thời gian hiện tại"""
+    return datetime.now(pytz.UTC).isoformat()
 
-    Args:
-        trade_history: Danh sách các giao dịch (mỗi giao dịch chứa date, action, price, quantity, profit_loss, outcome).
-
-    Returns:
-        Dictionary chứa các chỉ số hiệu suất (tỷ lệ thắng, lợi nhuận trung bình, tỷ lệ rủi ro/lợi nhuận).
-    """
-    try:
-        if not trade_history:
-            return {"error": "Không có lịch sử giao dịch để đánh giá."}
-
-        total_trades = len(trade_history)
-        wins = sum(1 for trade in trade_history if trade["outcome"] == "Profit")
-        win_rate = (wins / total_trades) * 100 if total_trades > 0 else 0
-        avg_profit_loss = np.mean([trade["profit_loss"] for trade in trade_history]) if total_trades > 0 else 0
-        total_profit = sum(trade["profit_loss"] for trade in trade_history)
-
-        # Tính tỷ lệ rủi ro/lợi nhuận (giả sử rủi ro là giá vào * 2% mỗi giao dịch)
-        risk_reward_ratios = []
-        for trade in trade_history:
-            entry_price = trade["price"]
-            risk = entry_price * 0.02  # Giả định rủi ro 2%
-            reward = trade["profit_loss"] / trade["quantity"] if trade["quantity"] > 0 else 0
-            if risk > 0:
-                risk_reward_ratios.append(reward / risk)
-        avg_risk_reward = np.mean(risk_reward_ratios) if risk_reward_ratios else 0
-
-        return json.loads(json.dumps({
-            "total_trades": total_trades,
-            "win_rate_pct": round(win_rate, 2),
-            "avg_profit_loss": round(avg_profit_loss, 2),
-            "total_profit": round(total_profit, 2),
-            "avg_risk_reward_ratio": round(avg_risk_reward, 2)
-        }, ignore_nan=True))
-    except Exception as e:
-        return {"error": f"Lỗi khi đánh giá hiệu suất giao dịch: {str(e)}"}
-
-@tool
-def simulate_alternative_trades(trade_history: List[Dict], technical_analysis: str) -> Dict:
-    """
-    Mô phỏng các kịch bản giao dịch thay thế để tối ưu hóa lợi nhuận.
-
-    Args:
-        trade_history: Danh sách các giao dịch.
-        technical_analysis: Phân tích kỹ thuật cung cấp thông tin về hỗ trợ, kháng cự, tín hiệu.
-
-    Returns:
-        Dictionary chứa các đề xuất giao dịch thay thế và lợi nhuận tiềm năng.
-    """
-    try:
-        if not trade_history or not technical_analysis:
-            return {"error": "Thiếu lịch sử giao dịch hoặc phân tích kỹ thuật."}
-
-        # Giả lập các kịch bản thay thế dựa trên hỗ trợ/kháng cự từ phân tích kỹ thuật
-        support = None
-        resistance = None
-        for line in technical_analysis.split("\n"):
-            if "Hỗ trợ" in line:
-                support = float(line.split(":")[-1].strip().split(";")[0])
-            if "Kháng cự" in line:
-                resistance = float(line.split(":")[-1].strip().split(";")[0])
-
-        alternative_trades = []
-        for trade in trade_history:
-            original_price = trade["price"]
-            action = trade["action"]
-            quantity = trade["quantity"]
-            profit_loss = trade["profit_loss"]
-
-            if action == "Buy" and support and original_price > support:
-                alt_price = support  # Mua tại mức hỗ trợ
-                alt_profit = (original_price - alt_price) * quantity
-                alternative_trades.append({
-                    "original_trade": trade,
-                    "alternative_action": "Buy",
-                    "alternative_price": alt_price,
-                    "potential_profit_improvement": round(alt_profit, 2)
-                })
-            elif action == "Sell" and resistance and original_price < resistance:
-                alt_price = resistance  # Bán tại mức kháng cự
-                alt_profit = (alt_price - original_price) * quantity
-                alternative_trades.append({
-                    "original_trade": trade,
-                    "alternative_action": "Sell",
-                    "alternative_price": alt_price,
-                    "potential_profit_improvement": round(alt_profit, 2)
-                })
-
-        return json.loads(json.dumps({
-            "alternative_trades": alternative_trades if alternative_trades else ["Không có kịch bản thay thế khả thi."]
-        }, ignore_nan=True))
-    except Exception as e:
-        return {"error": f"Lỗi khi mô phỏng giao dịch thay thế: {str(e)}"}
-
-tools = [evaluate_trade_performance, simulate_alternative_trades]
+tools = [get_current_time]
 tool_node = ToolNode(tools)
 llm_with_tools = llm.bind_tools(tools=tools, tool_choice="auto")
+
+class AnswerQuestionResponder(BaseModel):
+    """Schema cho câu trả lời"""
+    analysis: str = Field(description="Phân tích kỹ thuật")
+    critique: str = Field(description="Suy nghĩ của bạn về câu trả lời ban đầu")
+    query: list[str] = Field(description="1-3 truy vấn tìm kiếm để nghiên cứu cải tiến nhằm giải quyết lời chỉ trích về câu trả lời hiện tại của bạn")
+
+class AnswerQuestionRevise(BaseModel):
+    """Schema cho câu trả lời"""
+    analysis: str = Field(description="Phân tích kỹ thuật")
+    critique: str = Field(description="Suy nghĩ của bạn về câu trả lời ban đầu")
+    query: list[str] = Field(description="1-3 truy vấn tìm kiếm để nghiên cứu cải tiến nhằm giải quyết lời chỉ trích về câu trả lời hiện tại của bạn")
+    references: list[str] = Field(description="Danh sách các tài liệu tham khảo để cải tiến câu trả lời")
 
 # --- Hàm tiện ích ---
 def save_to_vectorstore(analysis_text: str, symbol: str, market_data: Optional[str]) -> str:
@@ -201,48 +114,40 @@ def generate_initial_response(state: HighLevelReflectionState) -> HighLevelRefle
     trade_history = state["trade_history"]
     messages = state["messages"]
 
-    trade_summary = "\n".join([
-        f"- Trade {t['date']} ({t['action']} @ {t['price']}): {t['reason']} Outcome: {t['outcome']} (P/L: {t['profit_loss']}). Analysis: {t['analysis']}"
-        for t in trade_history
-    ]) if trade_history else "Không có lịch sử giao dịch."
-
     prompt_template = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
-                """You are a stock trading analysis expert with the ability to evaluate and optimize trading decisions.
+                """You are a stock trading analysis expert, capable of evaluating and optimizing trading decisions.
 
                 Requirements:
-                1. Analyze past trades of the stock symbol based on:
+                1. Analyze past trades of the stock based on:
                    - Market context.
                    - Technical analysis (support, resistance, RSI, MACD, etc.).
-                   - Trade history (date, action, price, reason, outcome).
+                   - Trading history (date, action, price, reason, result).
                 2. Evaluate each trade:
-                   - Right/wrong decision? Why (based on technical signals, market)?
-                   - If wrong, suggest improvements (change entry/exit points, volume, timing).
+                   - Correct/incorrect decision? Why (based on technical signals, market)?
+                   - If incorrect, suggest improvements (change entry/exit points, volume, timing).
                 3. Profit optimization:
-                   - Simulate alternative trading scenarios to increase profits.
+                   - Simulate alternative trading scenarios to increase profit.
                 4. Summarize lessons learned:
-                   - From successes/mistakes, extract lessons applicable to the current context.
+                   - From successes/mistakes, derive lessons applicable to the current context.
                 5. Provide current trading recommendations based on technical and market analysis.
                 6. Output format:
                    - Summary of market context and technical analysis.
-                   - Evaluation of each trade (right/wrong, reasons, improvements).
-                   - Alternative scenarios to optimize profits.
+                   - Evaluation of each trade (correct/incorrect, reasons, improvements).
+                   - Alternative scenarios to optimize profit.
                    - Lessons learned.
                    - Current trading recommendations.
-                   - Maximum 400 words, clear and concise.
-                7. Use tools:
-                   - evaluate_trade_performance
-                   - simulate_alternative_trades"""
+                   - Maximum 400 words, clear and concise."""
             ),
             MessagesPlaceholder(variable_name="messages"),
             (
                 "user",
-                """Analyze trading decisions for {symbol}.
+                """Analyze trading decisions for stock symbol {symbol}.
                 Market context: {market_data}
                 Technical analysis: {technical_analysis}
-                Trade history: {trade_summary}"""
+                Trading history: {trade_history}"""
             ),
         ]
     )
@@ -252,9 +157,9 @@ def generate_initial_response(state: HighLevelReflectionState) -> HighLevelRefle
         "symbol": symbol,
         "market_data": market_data,
         "technical_analysis": technical_analysis,
-        "trade_summary": trade_summary,
+        "trade_history": trade_history,
     }
-    chain = prompt_template | llm_with_tools
+    chain = prompt_template | llm.with_structured_output(AnswerQuestionResponder)
 
     analysis_message = chain.invoke(prompt_input)
 
@@ -263,38 +168,18 @@ def generate_initial_response(state: HighLevelReflectionState) -> HighLevelRefle
             **state,
             "messages": messages + [analysis_message],
         }
-    else:
-        analysis_content = analysis_message.content
-        prompt_critique = f"""
-            Evaluate the trading decision analysis for {symbol}:
-            - Analysis: {analysis_content}
-            - Market context: {market_data}
-            Requirements:
-            1. Evaluate the accuracy, logic, and practicality of the analysis.
-            2. Identify 1-2 strengths and 1-2 weaknesses.
-            Output: Maximum 100 words, concise and clear.
-            """
-        critique_message = llm.invoke(prompt_critique)
-        critique_content = critique_message.content
-
-        prompt_query = f"""
-            Create a query to search for historical trading analysis for {symbol} based on:
-            - Analysis: {analysis_content}
-            - Evaluation: {critique_content}
-            Requirements: Specific query focusing on technical signals, trading decisions, and lessons learned.
-            Output: Maximum 50 words.
-            """
-        query_message = llm.invoke(prompt_query)
-        query_content = query_message.content
-
-        return {
-            **state,
-            "response": analysis_content,
-            "critique": critique_content,
-            "query": query_content,
-            "reflection_iteration": 0,
-            "messages": messages + [AIMessage(content=f"Trading decision analysis for {symbol}:\n{analysis_content}")]
-        }
+    analysis_content = analysis_message.analysis
+    critique_content = analysis_message.critique
+    query_content = analysis_message.query
+    
+    return {
+        **state,
+        "response": analysis_content,
+        "critique": critique_content,
+        "query": query_content,
+        "reflection_iteration": 0,
+        "messages": messages + [AIMessage(content=f"Phân tích quyết định giao dịch cho {symbol}:\n{analysis_content}")]
+    }
 
 def retrieve_historical(state: HighLevelReflectionState) -> HighLevelReflectionState:
     query = state["query"]
@@ -302,12 +187,12 @@ def retrieve_historical(state: HighLevelReflectionState) -> HighLevelReflectionS
     messages = state["messages"]
 
     if not query:
-        return {**state, "reflection_data": "No reflection query available."}
+        return {**state, "reflection_data": "Không có truy vấn reflection."}
 
     enhanced_query = f"{query} {symbol}"
     try:
         retrieved_docs = retriever.invoke(enhanced_query)
-        insights = f"No history found related to: '{query}'."
+        insights = f"Không tìm thấy lịch sử liên quan đến: '{query}'."
         if retrieved_docs:
             insights_list = []
             for i, doc in enumerate(retrieved_docs):
@@ -316,67 +201,74 @@ def retrieve_historical(state: HighLevelReflectionState) -> HighLevelReflectionS
                 insights_list.append(
                     f"Insight {i+1} ({metadata.get('symbol', 'N/A')}, {metadata.get('analysis_date_utc', '?')}):\n{content_preview}"
                 )
-            insights = f"Found {len(retrieved_docs)} historical analyses related to '{query}':\n\n" + "\n\n".join(insights_list)
+            insights = f"Tìm thấy {len(retrieved_docs)} phân tích lịch sử liên quan '{query}':\n\n" + "\n\n".join(insights_list)
     except Exception as e:
-        insights = f"Error retrieving history: {e}"
+        insights = f"Lỗi khi truy xuất lịch sử: {e}"
 
     return {
         **state,
         "reflection_data": insights,
-        "messages": messages + [AIMessage(content=f"History query results:\n{insights}")]
+        "messages": messages + [AIMessage(content=f"Kết quả truy vấn lịch sử:\n{insights}")]
     }
 
 def refine_analysis(state: HighLevelReflectionState) -> HighLevelReflectionState:
     response = state["response"]
     reflection_data = state["reflection_data"]
     critique = state["critique"]
-    query = state["query"]
     symbol = state["symbol"]
     messages = state["messages"]
     iteration = state["reflection_iteration"]
+    
+    prompt_template = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                """You are a stock trading analysis expert, capable of evaluating and optimizing trading decisions.
 
-    prompt_analysis = f"""
-        Refine the trading decision analysis for {symbol} based on:
-        - Initial analysis: {response}
-        - Evaluation: {critique}
-        - History: {reflection_data}
-        Requirements:
-        1. Improve based on evaluation and history (add alternative scenarios, deeper analysis).
-        2. Ensure accuracy, practicality and relevance to the market context.
-        3. Summarize lessons learned and current trading recommendations.
-        Output: Maximum 400 words.
-        """
-    refined_analysis_message = llm.invoke(prompt_analysis)
-    refined_analysis_content = refined_analysis_message.content
+                Requirements:
+                1. Refine trading decision analysis based on user feedback.
+                2. Evaluate the accuracy, logic, and practicality of the analysis.
+                3. Provide 1-2 strengths and 1-2 weaknesses in the analysis.
+                4. Create query questions to search history for improving the analysis.
+                5. Output format:
+                   - Refined analysis.
+                   - Evaluation (strengths/weaknesses).
+                   - History search query questions.
+                   - Maximum 400 words for analysis, 100 words for evaluation, 50 words for questions."""
+            ),
+            MessagesPlaceholder(variable_name="messages"),
+            (
+                "user",
+                """Refine the trading decision analysis for stock symbol {symbol}.
+                Initial analysis: {response}
+                Evaluation: {critique}
+                History: {reflection_data}"""
+            ),
+        ]
+    )
 
-    prompt_critique = f"""
-        Evaluate the refined trading decision analysis for {symbol}:
-        - Analysis: {refined_analysis_content}
-        Requirements:
-        1. Evaluate accuracy, logic and practicality.
-        2. Identify 1-2 strengths and 1-2 weaknesses.
-        Output: Maximum 100 words.
-        """
-    refined_critique_message = llm.invoke(prompt_critique)
-    refined_critique_content = refined_critique_message.content
-
-    prompt_query = f"""
-        Create a query to search for history for the refined trading decision analysis of {symbol}:
-        - Analysis: {refined_analysis_content}
-        - Evaluation: {refined_critique_content}
-        Requirements: Specific query focusing on technical signals, trading decisions, and lessons.
-        Output: Maximum 50 words.
-        """
-    refined_query_message = llm.invoke(prompt_query)
-    refined_query_content = refined_query_message.content
+    prompt_input = {
+        "messages": messages,
+        "symbol": symbol,
+        "response": response,
+        "critique": critique,
+        "reflection_data": reflection_data,
+    }
+    chain = prompt_template | llm.with_structured_output(AnswerQuestionRevise)
+    refined_message = chain.invoke(prompt_input)
+    refined_analysis_content = refined_message.analysis
+    refined_critique_content = refined_message.critique
+    refined_query_content = refined_message.query
+    refined_references_content = refined_message.references
 
     return {
         **state,
         "response": refined_analysis_content,
         "critique": refined_critique_content,
         "query": refined_query_content,
+        "reflection_data": refined_references_content,
         "reflection_iteration": iteration + 1,
-        "messages": messages + [AIMessage(content=f"Refined analysis (Iter {iteration + 1}):\n{refined_analysis_content}")]
+        "messages": messages + [AIMessage(content=f"Phân tích đã tinh chỉnh (Iter {iteration + 1}):\n{refined_analysis_content}")]
     }
 
 def format_final_output(state: HighLevelReflectionState) -> HighLevelReflectionState:
@@ -386,18 +278,17 @@ def format_final_output(state: HighLevelReflectionState) -> HighLevelReflectionS
     messages = state["messages"]
 
     if not final_analysis:
-        output = f"Unable to complete trading decision analysis for {symbol} due to insufficient data."
+        output = f"Không thể hoàn thành phân tích quyết định giao dịch cho {symbol} do thiếu dữ liệu."
         return {**state, "final_output": output, "messages": messages + [AIMessage(content=output)]}
 
     save_to_vectorstore(final_analysis, symbol, market_data)
 
     output = f"""
-        # Trading Decision Analysis for {symbol}
-        **Analysis Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-        **Market Context:**  
+        # Phân tích Quyết định Giao dịch {symbol}
+        **Bối cảnh Thị trường:**  
         {market_data}
 
-        ## Detailed Analysis
+        ## Phân tích Chi tiết
         {final_analysis}
         """
 
@@ -442,9 +333,9 @@ def build_workflow():
 
     return workflow.compile()
 
-def high_level_reflection_agent(symbol: str, market_data: Optional[str], technical_analysis: Optional[str], trade_history: Optional[List[Dict]], max_reflections: int = 2):
+def high_level_agent(symbol: str, market_data: Optional[str], technical_analysis: Optional[str], trade_history: Optional[List[Dict]], max_reflections: int = 2):
     initial_state = {
-        "messages": [HumanMessage(content=f"Analyze trading decisions for {symbol}.")],
+        "messages": [HumanMessage(content=f"Phân tích quyết định giao dịch {symbol}.")],
         "symbol": symbol,
         "market_data": market_data,
         "technical_analysis": technical_analysis,
@@ -463,23 +354,24 @@ def high_level_reflection_agent(symbol: str, market_data: Optional[str], technic
     return result.get("final_output", "Không có kết quả phân tích.")
 
 graph = build_workflow()
+
 # --- Chạy thử nghiệm ---
 if __name__ == "__main__":
     symbol_to_analyze = "AAPL"
     max_reflections = 2
     sample_market_data = (
-        f"Market Context for {symbol_to_analyze}:\n"
-        f"- Overview: The overall market has been sideways for the past few weeks.\n"
-        f"- Sector: Technology is showing signs of accumulation.\n"
-        f"- News: No significant recent news affecting the price."
+        f"Bối cảnh Thị trường cho {symbol_to_analyze}:\n"
+        f"- Tổng quan: Thị trường chung có xu hướng đi ngang trong vài tuần qua.\n"
+        f"- Ngành: Công nghệ đang có dấu hiệu tích lũy.\n"
+        f"- Tin tức: Không có tin tức trọng yếu nào gần đây ảnh hưởng đến giá."
     )
     sample_technical_analysis = (
-        f"Technical Analysis for {symbol_to_analyze}:\n"
-        f"- Trend: Bullish (MA20 > MA50).\n"
-        f"- RSI: 65 (Neutral, near Overbought).\n"
+        f"Phân tích Kỹ thuật cho {symbol_to_analyze}:\n"
+        f"- Xu hướng: Bullish (MA20 > MA50).\n"
+        f"- RSI: 65 (Neutral, gần Overbought).\n"
         f"- MACD: Bullish Crossover.\n"
-        f"- Support: 145; Resistance: 155.\n"
-        f"- Short-term forecast: Slight increase in the next few weeks."
+        f"- Hỗ trợ: 145; Kháng cự: 155.\n"
+        f"- Dự báo ngắn hạn: Tăng nhẹ trong vài tuần tới."
     )
     sample_trade_history = [
         {
@@ -489,10 +381,10 @@ if __name__ == "__main__":
             "action": "Buy",
             "price": 150.0,
             "quantity": 100,
-            "reason": "RSI gives oversold signal, positive MACD crossover.",
+            "reason": "RSI cho tín hiệu oversold, MACD crossover tích cực.",
             "outcome": "Profit",
             "profit_loss": 500.0,
-            "analysis": "Correct decision as the price increased after the technical signal."
+            "analysis": "Quyết định đúng do giá tăng sau tín hiệu kỹ thuật."
         },
         {
             "trade_id": str(uuid4()),
@@ -501,14 +393,14 @@ if __name__ == "__main__":
             "action": "Sell",
             "price": 155.0,
             "quantity": 100,
-            "reason": "Price hit strong resistance at 155, RSI overbought.",
+            "reason": "Giá chạm kháng cự mạnh tại 155, RSI overbought.",
             "outcome": "Loss",
             "profit_loss": -200.0,
-            "analysis": "Wrong decision as the price continued to rise after selling."
+            "analysis": "Quyết định sai do giá tiếp tục tăng sau khi bán."
         }
     ]
 
-    result = high_level_reflection_agent(
+    result = high_level_agent(
         symbol_to_analyze,
         sample_market_data,
         sample_technical_analysis,

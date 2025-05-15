@@ -18,6 +18,7 @@ from langchain_core.output_parsers import BaseOutputParser
 import json 
 import re 
 import os
+from modules.utils.llm import LLM
 
 
 load_dotenv()
@@ -149,7 +150,7 @@ def get_latest_information(data: AssetData) -> str:
 def get_llm(model : str = "gemini-2.0-flash", have_tools: bool = True) :
 
     
-    llm = ChatGoogleGenerativeAI(model = model, api_key = GEMINI_API_KEY, temperature = 0.5)
+    llm = LLM.get_gemini_llm(model_name=model, model_index = 1)
     if have_tools : 
         tools = get_tools() 
 

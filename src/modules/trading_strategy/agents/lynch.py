@@ -15,6 +15,7 @@ from modules.trading_strategy.tools.lynch_tools import (
 from modules.trading_strategy.tools.api_tools import  get_financial_metrics, search_line_items
 from modules.trading_strategy.prompt.lynch import get_lynch_prompt
 from langchain_google_genai import ChatGoogleGenerativeAI
+from modules.utils.llm import LLM
 
 # LangGraph imports
 from langgraph.graph import StateGraph, END
@@ -215,11 +216,7 @@ def generate_signal(state: LynchState) -> Dict:
             signal=signal
         )
         
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash", 
-            api_key=GEMINI_API_KEY
-        )
-        
+        llm = LLM.get_gemini_llm(model_index = 1) 
         # Get LLM response and parse it
         chain = llm | TradingSignalParser()
         lynch_output = chain.invoke(prompt)

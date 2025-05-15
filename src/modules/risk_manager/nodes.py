@@ -11,6 +11,7 @@ from modules.risk_manager.tools import compile_risk_profile
 from modules.risk_manager.plan import generate_mitigation_plan
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import StateGraph , END
+from modules.utils.llm import LLM
 from dotenv import load_dotenv
 
 
@@ -30,10 +31,10 @@ def initialize_state(state: RiskManagerState) -> RiskManagerState:
     if trade_decision.action not in ["BUY", "SELL", "HOLD"]:
         raise ValueError(f"Invalid action: {trade_decision.action}. Must be 'buy', 'sell', or 'hold'.")
 
-    if trade_decision.quantity <= 0:
+    if trade_decision.quantity < 0:
         raise ValueError("Quantity must be greater than 0.")
     
-    if trade_decision.price <= 0:
+    if trade_decision.price < 0:
         raise ValueError("Price must be greater than 0.")
 
     # generate sample data for testing 
@@ -103,10 +104,7 @@ def generate_final_decision(state: RiskManagerState) -> RiskManagerState:
         mitigation_plan=state.mitigation_plan
     )
 
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash", 
-        api_key = GEMINI_API_KEY
-    )
+    llm = LLM.get_gemini_llm()
 
     chain = llm | RiskManagerParser()
 

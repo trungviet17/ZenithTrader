@@ -20,7 +20,7 @@ from modules.trading_strategy.tools.murphy_tools import (
 from modules.trading_strategy.tools.api_tools import get_history_price
 
 from modules.trading_strategy.prompt.murphy import get_murphy_prompt
-from langchain_google_genai import ChatGoogleGenerativeAI
+from modules.utils.llm import LLM
 
 
 from langgraph.graph import StateGraph, END 
@@ -282,10 +282,7 @@ def generate_signal(state: MurphyState) -> Dict:
             signal=signal
         )
         
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash", 
-            api_key=GEMINI_API_KEY
-        )
+        llm = LLM.get_gemini_llm(model_index = 1) 
         
         # Get LLM response and parse it
         chain = llm | TradingSignalParser()

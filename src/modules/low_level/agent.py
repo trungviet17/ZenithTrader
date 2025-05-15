@@ -1,4 +1,4 @@
-import yfinance as yf
+import os
 from datetime import datetime
 import pytz
 import pandas as pd
@@ -6,10 +6,12 @@ import numpy as np
 from typing import TypedDict, Annotated, List, Dict, Any, Literal, Optional
 from uuid import uuid4
 import json
+from pydantic import BaseModel, Field
+from twelvedata import TDClient
 
 from langchain_core.tools import tool
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_google_genai import ChatGoogleGenerativeAI
+
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.documents import Document
@@ -19,21 +21,18 @@ from qdrant_client.http.models import Distance, VectorParams
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.graph.message import add_messages
-from modules.utils.llm import LLM
+from modules.utils.llm import LLM 
+
 from dotenv import load_dotenv
-import os 
 load_dotenv()
 
-
-google_api_key = os.getenv("GEMINI_API_KEY")
-
-
-
-
 # --- Khởi tạo LLM, Embeddings và Vector Store ---
-# llm = ChatOllama(model="cogito:3b")
-llm = LLM.get_gemini_llm()
+
+llm = LLM.get_gemini_llm(model_index= 2)
+
 embeddings = LLM.get_gemini_embedding()
+# --- Thiết lập API Key ---
+TWELVEDATA_API_KEY = os.getenv("TWELVEDATA_API_KEY")
 
 # --- Thiết lập Qdrant ---
 QDRANT_PATH = "./low_level/qdrant_data"
@@ -75,299 +74,136 @@ class ReflectionState(TypedDict):
 
 # --- Tools Phân tích Kỹ thuật ---
 @tool
-def calculate_technical_indicators(symbol: str, interval: str = "1d", period: str = "3mo") -> Dict:
+def technical_indicator_analysis(
+    symbol: str,
+    interval: str = "1day",
+    outputsize: int = 30,
+    start_date: str = "2025-01-01",
+    end_date: str = "2025-03-01"
+) -> Dict[str, str]:
     """
-    Lấy dữ liệu giá cổ phiếu từ Yahoo Finance và tính toán các chỉ báo kỹ thuật.
-
+    Analyzes patterns based on technical indicators of a stock.
+    
     Args:
-        symbol: Mã cổ phiếu (ticker symbol).
-        interval: Khoảng cách giữa các điểm dữ liệu (vd: 1h, 1d, 5d, 1wk).
-        period: Khoảng thời gian lấy dữ liệu (vd: 1mo, 3mo, 6mo, 1y, ytd, max).
+        symbol (str): Stock symbol to analyze (e.g., "AAPL").
+        interval (str): Time interval for data (default is 1 day) (e.g., "8h", "1day", "1week", "1month").
+        outputsize (int): Amount of data to retrieve (default is 30).
+        start_date (str): Start date for data retrieval ('YYYY-MM-DD' format).
+        end_date (str): End date for data retrieval ('YYYY-MM-DD' format).
 
     Returns:
-        Dictionary chứa các chỉ báo kỹ thuật đã tính toán hoặc thông báo lỗi.
+        dict: Technical analysis results as a dictionary.
     """
+    td = TDClient(apikey=TWELVEDATA_API_KEY)
+
     try:
-        ticker = yf.Ticker(symbol)
-        df = ticker.history(period=period, interval=interval)
-
-        if df.empty:
-            return {"error": f"Không tìm thấy dữ liệu cho {symbol} với khoảng thời gian={period}, interval={interval}"}
-
-        windows = [5, 10, 20, 50, 100, 200]
-        for w in windows:
-            if len(df) >= w:
-                df[f'MA{w}'] = df['Close'].rolling(window=w).mean()
-            else:
-                df[f'MA{w}'] = np.nan
-
-        bb_window = 20
-        if len(df) >= bb_window:
-            df['BB_Middle'] = df['Close'].rolling(window=bb_window).mean()
-            df['BB_Std'] = df['Close'].rolling(window=bb_window).std()
-            df['BBU'] = df['BB_Middle'] + 2 * df['BB_Std']
-            df['BBL'] = df['BB_Middle'] - 2 * df['BB_Std']
-        else:
-            df['BB_Middle'], df['BBU'], df['BBL'] = np.nan, np.nan, np.nan
-
-        rsi_period = 14
-        if len(df) > rsi_period:
-            delta = df['Close'].diff()
-            gain = delta.where(delta > 0, 0).fillna(0)
-            loss = -delta.where(delta < 0, 0).fillna(0)
-            avg_gain = gain.ewm(com=rsi_period - 1, min_periods=rsi_period).mean()
-            avg_loss = loss.ewm(com=rsi_period - 1, min_periods=rsi_period).mean()
-            rs = avg_gain / avg_loss.replace(0, np.nan)
-            df['RSI'] = 100 - (100 / (1 + rs))
-        else:
-            df['RSI'] = np.nan
-
-        span1, span2, signal_span = 12, 26, 9
-        if len(df) >= span2:
-            ema_12 = df['Close'].ewm(span=span1, adjust=False).mean()
-            ema_26 = df['Close'].ewm(span=span2, adjust=False).mean()
-            df['MACD'] = ema_12 - ema_26
-            df['MACD_Signal'] = df['MACD'].ewm(span=signal_span, adjust=False).mean()
-            df['MACD_Hist'] = df['MACD'] - df['MACD_Signal']
-        else:
-            df['MACD'], df['MACD_Signal'], df['MACD_Hist'] = np.nan, np.nan, np.nan
-
-        vol_sma_window = 20
-        if len(df) >= vol_sma_window:
-            df['Vol_SMA20'] = df['Volume'].rolling(window=vol_sma_window).mean()
-        else:
-            df['Vol_SMA20'] = np.nan
-
-        latest = df.iloc[-1]
-        indicator_keys = [f"MA{w}" for w in windows] + ["BBU", "BB_Middle", "BBL Common Indicators ", "RSI", "MACD", "MACD_Signal", "MACD_Hist", "Vol_SMA20"]
-        indicators = {k: (round(v, 2) if pd.notna(v) and isinstance(v, (int, float)) else None) for k, v in indicators.items()}
-
-        signals = {}
-        close_price = latest.get('Close')
-        if close_price is not None:
-            if indicators.get("MA20") and indicators.get("MA50"):
-                signals["Trend_ShortMid"] = "Tăng giá (MA20 > MA50)" if indicators["MA20"] > indicators["MA50"] else "Giảm giá (MA20 < MA50)"
-            if indicators.get("MA50") and indicators.get("MA200"):
-                signals["Trend_MidLong"] = "Tăng giá (MA50 > MA200)" if indicators["MA50"] > indicators["MA200"] else "Giảm giá (MA50 < MA200)"
-            if indicators.get("RSI"):
-                signals["RSI_Signal"] = "Quá mua" if indicators["RSI"] > 70 else "Quá bán" if indicators["RSI"] < 30 else "Trung tính"
-            if indicators.get("MACD") is not None and indicators.get("MACD_Signal") is not None:
-                signals["MACD_Signal"] = (
-                    "Giao cắt tăng giá / Đà tăng" if indicators["MACD"] > indicators["MACD_Signal"] and indicators.get("MACD_Hist", 0) > 0 else
-                    "Giao cắt giảm giá / Đà giảm" if indicators["MACD"] < indicators["MACD_Signal"] and indicators.get("MACD_Hist", 0) < 0 else
-                    "Trung tính / Yếu dần"
-                )
-            if indicators.get("BBU") and indicators.get("BBL"):
-                signals["BB_Signal"] = (
-                    "Giá vượt dải trên (có thể quá mua/breakout)" if close_price > indicators["BBU"] else
-                    "Giá dưới dải dưới (có thể quá bán/breakdown)" if close_price < indicators["BBL"] else
-                    "Giá trong dải Bollinger"
-                )
-
-        changes = {}
-        if close_price is not None:
-            for days in [5, 20, 60]:
-                if len(df) > days:
-                    start_price = df['Close'].iloc[-days-1]
-                    if start_price != 0:
-                        changes[f"{days}d_change_pct"] = round(((close_price - start_price) / start_price) * 100, 2)
-                    else:
-                        changes[f"{days}d_change_pct"] = None
-                else:
-                    changes[f"{days}d_change_pct"] = None
-
-        return json.loads(json.dumps({
-            "symbol": symbol,
-            "latest_close": round(close_price, 2) if close_price is not None else None,
-            "latest_date": df.index[-1].strftime('%Y-%m-%d %H:%M:%S') if not df.empty else None,
-            "indicators": indicators,
-            "signals": signals if signals else {"info": "Không đủ dữ liệu để tạo tín hiệu"},
-            "price_changes_pct": changes
-        }, ignore_nan=True))
-    except Exception as e:
-        return {"error": f"Lỗi khi tính toán chỉ báo cho {symbol}: {str(e)}"}
-
-@tool
-def analyze_patterns_trends(symbol: str, interval: str = "1d", period: str = "6mo") -> Dict:
-    """
-    Phân tích mẫu giá, xu hướng, hỗ trợ và kháng cự dựa trên dữ liệu giá cổ phiếu từ Yahoo Finance.
-
-    Args:
-        symbol: Mã cổ phiếu (ticker symbol).
-        interval: Khoảng cách giữa các điểm dữ liệu.
-        period: Khoảng thời gian lấy dữ liệu.
-
-    Returns:
-        Dictionary chứa mẫu giá, xu hướng, và hỗ trợ/kháng cự hoặc thông báo lỗi.
-    """
-    try:
-        ticker = yf.Ticker(symbol)
-        df = ticker.history(period=period, interval=interval)
-
-        if df.empty:
-            return {"error": f"Không tìm thấy dữ liệu cho {symbol} với khoảng thời gian={period}, interval={interval}"}
-
-        patterns = []
-        if len(df) >= 5:
-            recent_df = df.tail(5)
-            for i in range(len(recent_df)):
-                row = recent_df.iloc[i]
-                body_size = abs(row['Open'] - row['Close'])
-                range_size = row['High'] - row['Low']
-                if range_size > 0 and body_size / range_size < 0.1:
-                    patterns.append(f"Khả năng có nến Doji vào {recent_df.index[i].strftime('%Y-%m-%d')}")
-
-        if len(df) >= 60:
-            rolling_max = df['High'].rolling(window=30).max()
-            rolling_min = df['Low'].rolling(window=30).min()
-            if df['Close'].iloc[-1] < rolling_max.iloc[-2] * 0.98 and df['High'].iloc[-30:-1].max() > rolling_max.iloc[-2] * 0.99:
-                patterns.append("Cảnh báo khả năng có mẫu hình Double Top (cần xác nhận thêm)")
-            if df['Close'].iloc[-1] > rolling_min.iloc[-2] * 1.02 and df['Low'].iloc[-30:-1].min() < rolling_min.iloc[-2] * 1.01:
-                patterns.append("Cảnh báo khả năng có mẫu hình Double Bottom (cần xác nhận thêm)")
-
-        trends = {}
-        if len(df) >= 50:
-            ma20 = df['Close'].rolling(window=20).mean().iloc[-1]
-            ma50 = df['Close'].rolling(window=50).mean().iloc[-1]
-            trends["Xu_huong_ngan_han"] = "Tăng giá (MA20 trên MA50)" if pd.notna(ma20) and pd.notna(ma50) and ma20 > ma50 else "Giảm giá (MA20 dưới MA50)"
-        else:
-            trends["Xu_huong_ngan_han"] = "Không đủ dữ liệu"
-
-        if len(df) >= 200:
-            ma50 = df['Close'].rolling(window=50).mean().iloc[-1]
-            ma200 = df['Close'].rolling(window=200).mean().iloc[-1]
-            trends["Xu_huong_dai_han"] = "Tăng giá (MA50 trên MA200)" if pd.notna(ma50) and pd.notna(ma200) and ma50 > ma200 else "Giảm giá (MA50 dưới MA200)"
-        else:
-            trends["Xu_huong_dai_han"] = "Không đủ dữ liệu"
-
-        support_resistance = {}
-        if len(df) >= 30:
-            recent_data_sr = df.tail(30)
-            highest_high = recent_data_sr['High'].max()
-            lowest_low = recent_data_sr['Low'].min()
-            last_close = recent_data_sr['Close'].iloc[-1]
-
-            support_resistance["Ho_tro_gan_nhat_30d"] = round(lowest_low, 2) if pd.notna(lowest_low) else None
-            support_resistance["Khang_cu_gan_nhat_30d"] = round(highest_high, 2) if pd.notna(highest_high) else None
-
-            if pd.notna(highest_high) and pd.notna(lowest_low) and highest_high > lowest_low:
-                diff = highest_high - lowest_low
-                support_resistance["Fib_0.236_retracement"] = round(highest_high - 0.236 * diff, 2)
-                support_resistance["Fib_0.382_retracement"] = round(highest_high - 0.382 * diff, 2)
-                support_resistance["Fib_0.500_retracement"] = round(highest_high - 0.500 * diff, 2)
-                support_resistance["Fib_0.618_retracement"] = round(highest_high - 0.618 * diff, 2)
-
-        return json.loads(json.dumps({
-            "symbol": symbol,
-            "patterns_detected": patterns if patterns else ["Không có mẫu hình rõ ràng được phát hiện tự động"],
-            "current_trends": trends,
-            "support_resistance_levels": support_resistance
-        }, ignore_nan=True))
-    except Exception as e:
-        return {"error": f"Lỗi khi phân tích mẫu hình và xu hướng cho {symbol}: {str(e)}"}
-
-@tool
-def analyze_volume_profile(symbol: str, interval: str = "1d", period: str = "3mo") -> Dict:
-    """
-    Phân tích hồ sơ khối lượng giao dịch (volume profile) để xác định các vùng giá quan trọng.
-
-    Args:
-        symbol: Mã cổ phiếu (ticker symbol).
-        interval: Khoảng cách giữa các điểm dữ liệu.
-        period: Khoảng thời gian lấy dữ liệu.
-
-    Returns:
-        Dictionary chứa thông tin về vùng giá có khối lượng cao/thấp và vùng giá trị (value area).
-    """
-    try:
-        ticker = yf.Ticker(symbol)
-        df = ticker.history(period=period, interval=interval)
-
-        if df.empty:
-            return {"error": f"Không tìm thấy dữ liệu cho {symbol} với khoảng thời gian={period}, interval={interval}"}
-
-        # Phân tích hồ sơ khối lượng
-        price_bins = np.histogram(df['Close'], bins=50, weights=df['Volume'])[0]
-        price_levels = np.histogram(df['Close'], bins=50)[1]
-
-        # Tìm vùng giá có khối lượng cao (Point of Control - POC)
-        poc_index = np.argmax(price_bins)
-        poc_price = (price_levels[poc_index] + price_levels[poc_index + 1]) / 2
-
-        # Tính vùng giá trị (Value Area: 68% tổng khối lượng)
-        total_volume = df['Volume'].sum()
-        value_area_volume = total_volume * 0.68
-        sorted_indices = np.argsort(price_bins)[::-1]
-        cumulative_volume = 0
-        value_area_bins = []
-        for idx in sorted_indices:
-            cumulative_volume += price_bins[idx]
-            value_area_bins.append(idx)
-            if cumulative_volume >= value_area_volume:
-                break
-
-        value_area_high = (price_levels[max(value_area_bins) + 1] + price_levels[max(value_area_bins)]) / 2
-        value_area_low = (price_levels[min(value_area_bins) + 1] + price_levels[min(value_area_bins)]) / 2
-
-        return json.loads(json.dumps({
-            "symbol": symbol,
-            "point_of_control": round(poc_price, 2),
-            "value_area_high": round(value_area_high, 2),
-            "value_area_low": round(value_area_low, 2),
-            "latest_date": df.index[-1].strftime('%Y-%m-%d %H:%M:%S') if not df.empty else None
-        }, ignore_nan=True))
-    except Exception as e:
-        return {"error": f"Lỗi khi phân tích hồ sơ khối lượng cho {symbol}: {str(e)}"}
-
-@tool
-def fetch_market_sentiment(symbol: str) -> Dict:
-    """
-    Lấy thông tin tâm lý thị trường (ví dụ: VIX) để bổ sung bối cảnh phân tích.
-
-    Args:
-        symbol: Mã cổ phiếu (ticker symbol).
-
-    Returns:
-        Dictionary chứa thông tin tâm lý thị trường hoặc thông báo lỗi.
-    """
-    try:
-        vix_ticker = yf.Ticker("^VIX")
-        vix_data = vix_ticker.history(period="1mo", interval="1d")
-
-        if vix_data.empty:
-            return {"error": "Không tìm thấy dữ liệu VIX"}
-
-        latest_vix = vix_data['Close'].iloc[-1]
-        vix_signal = (
-            "Tâm lý thị trường biến động cao (sợ hãi)" if latest_vix > 30 else
-            "Tâm lý thị trường ổn định (tự tin)" if latest_vix < 20 else
-            "Tâm lý thị trường trung tính"
+        ts = (
+            td.time_series(
+                symbol=symbol,
+                interval=interval,
+                outputsize=outputsize,
+                timezone="Exchange",
+                dp=5,
+                start_date=start_date,
+                end_date=end_date
+            )
+            .with_ma(time_period=9, ma_type="sma", series_type="close")
+            .with_ema(time_period=9, series_type="close")
+            .with_rsi(time_period=14, series_type="close")
+            .with_macd(fast_period=12, slow_period=26, signal_period=9, series_type="close")
+            .with_bbands(time_period=20, sd=2, ma_type="sma", series_type="close")
+            .with_atr(time_period=14)
+            .without_ohlc()
         )
 
-        return json.loads(json.dumps({
-            "symbol": symbol,
-            "vix_level": round(latest_vix, 2),
-            "vix_signal": vix_signal,
-            "latest_date": vix_data.index[-1].strftime('%Y-%m-%d %H:%M:%S') if not vix_data.empty else None
-        }, ignore_nan=True))
-    except Exception as e:
-        return {"error": f"Lỗi khi lấy dữ liệu tâm lý thị trường: {str(e)}"}
+        df = ts.as_pandas()
+        analysis = {}
 
-tools = [calculate_technical_indicators, analyze_patterns_trends, analyze_volume_profile, fetch_market_sentiment]
+        # MA trend
+        if "ma" in df.columns and len(df["ma"].dropna()) >= 5:
+            ma_recent = df["ma"].dropna().iloc[-1]
+            ma_prev = df["ma"].dropna().iloc[-5]
+            trend = "increasing" if ma_recent > ma_prev else "decreasing"
+            analysis["MA"] = f"MA has a {trend} trend from {ma_prev:.2f} to {ma_recent:.2f}."
+
+        # EMA trend
+        if "ema" in df.columns and len(df["ema"].dropna()) >= 5:
+            ema_recent = df["ema"].dropna().iloc[-1]
+            ema_prev = df["ema"].dropna().iloc[-5]
+            trend = "increasing" if ema_recent > ema_prev else "decreasing"
+            analysis["EMA"] = f"EMA has a {trend} trend from {ema_prev:.2f} to {ema_recent:.2f}."
+
+        # RSI
+        if "rsi" in df.columns:
+            rsi = df["rsi"].dropna().iloc[-1]
+            if rsi > 70:
+                status = "overbought (may adjust downward)"
+            elif rsi < 30:
+                status = "oversold (may recover)"
+            else:
+                status = "neutral"
+            analysis["RSI"] = f"Current RSI is {rsi:.2f}, status is {status}."
+
+        # MACD
+        if {"macd", "macd_signal", "macd_hist"}.issubset(df.columns):
+            last = df.dropna(subset=["macd", "macd_signal", "macd_hist"]).iloc[-1]
+            signal = "bullish" if last["macd"] > last["macd_signal"] else "bearish"
+            analysis["MACD"] = (
+                f"MACD: {last['macd']:.2f}, signal: {last['macd_signal']:.2f}, "
+                f"histogram: {last['macd_hist']:.2f} → {signal} signal."
+            )
+
+        # Bollinger Bands
+        if {"upper_band", "middle_band", "lower_band"}.issubset(df.columns):
+            bb = df.dropna(subset=["upper_band", "middle_band", "lower_band"]).iloc[-1]
+            spread = float(bb["upper_band"]) - float(bb["lower_band"])
+            analysis["BollingerBands"] = (
+                f"Bollinger Bands have a range of {spread:.2f} points (Upper: {bb['upper_band']}, Lower: {bb['lower_band']})."
+            )
+
+        # ATR
+        if "atr" in df.columns:
+            atr = df["atr"].dropna().iloc[-1]
+            analysis["ATR"] = f"ATR indicator is {atr:.2f}, indicating recent average volatility."
+
+        return analysis
+
+    except Exception as e:
+        return {"error": str(e)}
+
+    
+    
+# --- Định nghĩa các công cụ --- 
+tools = [technical_indicator_analysis]
 tool_node = ToolNode(tools)
 llm_with_tools = llm.bind_tools(tools=tools, tool_choice="auto")
 
-# --- Hàm tiện ích ---
-def save_to_vectorstore(analysis_text: str, symbol: str, market_data: Optional[str]) -> str:
+class AnswerQuestionResponder(BaseModel):
+    """Schema for the answer"""
+    analysis: str = Field(description="Technical analysis")
+    critique: str = Field(description="Your thoughts on the initial answer")
+    query: list[str] = Field(description="1-3 search queries to research improvements to address critiques of your current answer")
+
+class AnswerQuestionRevise(BaseModel):
+    """Schema for the answer"""
+    analysis: str = Field(description="Technical analysis")
+    critique: str = Field(description="Your thoughts on the initial answer")
+    query: list[str] = Field(description="1-3 search queries to research improvements to address critiques of your current answer")
+    references: list[str] = Field(description="List of references to improve the answer")
+
+# --- Utility functions ---
+def save_to_vectorstore(analysis_text: str, symbol: str, market_context: Optional[str]) -> str:
     now_utc = datetime.now(pytz.UTC)
     doc_id = str(uuid4())
     metadata = {
         "doc_id": doc_id,
-        "symbol": symbol,
+         "symbol": symbol,
         "analysis_date_utc": now_utc.isoformat(),
-        "market_data_summary": market_data[:200] if market_data else "N/A",
+        "market_context_summary": market_context[:200] if market_context else "N/A",
     }
-    content_to_embed = f"Stock Symbol: {symbol}\nMarket context: {market_data}\n\nTechnical analysis:\n{analysis_text}"
+
+    content_to_embed = f"Symbol: {symbol}\nMarket Context: {market_context}\n\nTechnical Analysis:\n{analysis_text}"
+
     try:
         vector_store.add_documents(documents=[Document(page_content=content_to_embed, metadata=metadata)], ids=[doc_id])
         return f"Analysis saved to vector store (ID: {doc_id})"
@@ -384,40 +220,36 @@ def generate_initial_response(state: ReflectionState) -> ReflectionState:
         [
             (
                 "system",
-                """You are a financial market technical analysis expert. Your task is to provide in-depth technical analysis for a stock symbol based on market context.
+                """You are a technical analysis expert in financial markets. Your task is to provide in-depth technical analysis for a stock symbol based on market context and data from analysis tools.
 
                 Requirements:
-                1. Analyze key technical indicators (MA, RSI, MACD, Bollinger Bands, Volume Profile).
-                2. Identify price patterns (Doji, Double Top/Bottom), short-term and long-term trends.
-                3. Determine support, resistance zones, value areas and point of control (POC).
-                4. Evaluate market sentiment (based on VIX or other factors).
-                5. Provide clear short-term forecast (1-2 weeks), based on technical signals.
-                6. Output format:
-                   - Summary of technical indicators.
-                   - Price patterns and trends.
-                   - Support, resistance, value areas.
-                   - Market sentiment.
-                   - Short-term forecast.
-                   - Maximum 300 words, concise and coherent.
-                7. Use tools:
-                   - calculate_technical_indicators
-                   - analyze_patterns_trends
-                   - analyze_volume_profile
-                   - fetch_market_sentiment"""
+                1. Use the `technical_indicator_analysis` tool to get data on technical indicators (MA, EMA, RSI, MACD, Bollinger Bands, ATR).
+                2. Based on the tool data, identify potential price patterns (e.g., Doji, Double Top/Bottom) and short/long-term trends.
+                3. Identify support and resistance zones based on Bollinger Bands or recent price levels from tool data.
+                4. Assess market sentiment based on RSI and MACD.
+                5. Provide short-term forecast (1-2 weeks) based on technical signals.
+                6. Output format (maximum 300 words):
+                - **Technical Indicator Summary**: Summarize MA, EMA, RSI, MACD, Bollinger Bands, ATR.
+                - **Price Patterns and Trends**: Describe price patterns and trends.
+                - **Support and Resistance**: Key price levels.
+                - **Market Sentiment**: Based on RSI, MACD.
+                - **Short-term Forecast**: Price trend prediction.
+                7. Ensure analysis is concise, accurate, and aligned with the market context."""
             ),
             MessagesPlaceholder(variable_name="messages"),
             (
                 "user",
-                """Provide technical analysis for {symbol}, based on market context: {market_context}."""
+                """Provide technical analysis for {symbol}, based on the market context: {market_context}."""
             ),
         ]
     )
-
+    
     prompt_input = {
         "messages": messages,
         "symbol": symbol,
         "market_context": market_context,
     }
+
     chain = prompt_template | llm_with_tools
 
     analysis_message = chain.invoke(prompt_input)
@@ -427,38 +259,55 @@ def generate_initial_response(state: ReflectionState) -> ReflectionState:
             **state,
             "messages": messages + [analysis_message],
         }
-    else:
-        analysis_content = analysis_message.content
-        prompt_critique = f"""
-            Evaluate the technical analysis for {symbol}:
-            - Analysis: {analysis_content}
-            - Market context: {market_context}
-            Requirements:
-            1. Evaluate the accuracy, completeness and logic of the analysis.
-            2. Identify 1-2 strengths and 1-2 weaknesses.
-            Output: Maximum 100 words, concise and clear.
-            """
-        critique_message = llm.invoke(prompt_critique)
-        critique_content = critique_message.content
+        
+    final_template = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                """You are a technical analysis expert in financial markets. Your task is to synthesize results from the technical analysis tool and create a structured response.
 
-        prompt_query = f"""
-            Create a query to search for historical technical analysis for {symbol} based on:
-            - Analysis: {analysis_content}
-            - Evaluation: {critique_content}
-            Requirements: Specific query focusing on indicators (RSI, MACD, MA), price patterns, and key value areas.
-            Output: Maximum 50 words.
-            """
-        query_message = llm.invoke(prompt_query)
-        query_content = query_message.content
+                Requirements:
+                1. Synthesize results from the technical analysis tools to describe technical indicators.
+                2. Provide comments on the analysis results.
+                3. Structure your response according to this format:
+                   - analysis: Provide comprehensive technical analysis based on the tool results
+                   - critique: Offer thoughts on limitations or areas for improvement in the analysis
+                   - query: Suggest 1-3 specific search queries to research improvements
+                   - references: Include a list of reference types that would help improve the analysis
+                """
+            ),
+            MessagesPlaceholder(variable_name="messages"),
+            (
+                "user",
+                """From the following technical analysis results, create a response and suggest search queries to improve the analysis for {symbol}:
+                **Market Context:** {market_context}
+                **Analysis Results:** {analysis}"""
+            ),
+        ]
+    )
+    
+    prompt_input_final = {
+        "messages": messages,
+        "symbol": symbol,
+        "market_context": market_context,
+        "analysis": analysis_message.content,
+    }
+    chain_final = final_template | llm.with_structured_output(AnswerQuestionResponder)
+        
+    final_message = chain_final.invoke(prompt_input_final)
+    
+    analysis_content = final_message.analysis
+    critique_content = final_message.critique
+    query_content = final_message.query
 
-        return {
-            **state,
-            "response": analysis_content,
-            "critique": critique_content,
-            "query": query_content,
-            "reflection_iteration": 0,
-            "messages": messages + [AIMessage(content=f"Technical analysis for {symbol}:\n{analysis_content}")]
-        }
+    return {
+        **state,
+        "response": analysis_content,
+        "critique": critique_content,
+        "query": query_content,
+        "reflection_iteration": 0,
+        "messages": messages + [AIMessage(content=f"Technical analysis for {symbol}:\n{analysis_content}")]
+    }
 
 def retrieve_historical(state: ReflectionState) -> ReflectionState:
     query = state["query"]
@@ -466,7 +315,7 @@ def retrieve_historical(state: ReflectionState) -> ReflectionState:
     messages = state["messages"]
 
     if not query:
-        return {**state, "reflection_data": "No reflection query available."}
+        return {**state, "reflection_data": "No reflection query."}
 
     enhanced_query = f"{query} {symbol}"
     try:
@@ -487,65 +336,63 @@ def retrieve_historical(state: ReflectionState) -> ReflectionState:
     return {
         **state,
         "reflection_data": insights,
-        "messages": messages + [AIMessage(content=f"History query results:\n{insights}")]
+        "messages": messages + [AIMessage(content=f"Historical query results:\n{insights}")]
     }
 
 def revisor_analysis(state: ReflectionState) -> ReflectionState:
     response = state["response"]
     reflection_data = state["reflection_data"]
     critique = state["critique"]
-    query = state["query"]
     symbol = state["symbol"]
     messages = state["messages"]
     iteration = state["reflection_iteration"]
+    
+    prompt_template = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                """You are a technical analysis expert. Your task is to refine the technical analysis based on feedback, history, and market context.
 
-    prompt_analysis = f"""
-        Refine the technical analysis for {symbol} based on:
-        - Initial analysis: {response}
-        - Evaluation: {critique}
-        - History: {reflection_data}
-        Requirements:
-        1. Improve the analysis based on evaluation and history.
-        2. Ensure accuracy, completeness, and relevance to market context.
-        3. Maintain format: indicator summary, patterns, support/resistance, sentiment, forecast.
-        Output: Maximum 300 words.
-        """
-    refined_analysis_message = llm.invoke(prompt_analysis)
-    refined_analysis_content = refined_analysis_message.content
+                Requirements:
+                1. Review the initial analysis, feedback (`critique`), and historical data (`reflection_data`) to improve the analysis.
+                2. Address limitations mentioned in the `critique` (e.g., add price patterns, clearly identify support/resistance).
+                3. Integrate information from `reflection_data` to increase accuracy (if available).
+                4. Output format (maximum 300 words):
+                - **Technical Indicator Summary**: Update based on new data.
+                - **Price Patterns and Trends**: Clearly identify price patterns and trends.
+                - **Support and Resistance**: Key price levels.
+                - **Market Sentiment**: Based on RSI, MACD.
+                - **Short-term Forecast**: Price trend prediction."""
+            ),
+            MessagesPlaceholder(variable_name="messages"),
+            (
+                "user",
+                """Refine the technical analysis for {symbol} based on:
+                - Initial analysis: {response}
+                - Feedback: {critique}
+                - Historical data: {reflection_data}"""
 
-    prompt_critique = f"""
-        Evaluate the refined technical analysis for {symbol}:
-        - Analysis: {refined_analysis_content}
-        Requirements:
-        1. Evaluate accuracy, completeness, and logic.
-        2. Identify 1-2 strengths and 1-2 weaknesses.
-        Output: Maximum 100 words.
-        """
-    refined_critique_message = llm.invoke(prompt_critique)
-    refined_critique_content = refined_critique_message.content
-
-    prompt_query = f"""
-        Create a query to search for history for the refined technical analysis of {symbol}:
-        - Analysis: {refined_analysis_content}
-        - Evaluation: {refined_critique_content}
-        Requirements: Specific query focusing on indicators, price patterns, and value areas.
-        Output: Maximum 50 words.
-        """
-    refined_query_message = llm.invoke(prompt_query)
-    refined_query_content = refined_query_message.content
-
-    prompt_references = f"""
-        Create a list of references used for the refined technical analysis of {symbol}:
-        - Analysis: {refined_analysis_content}
-        - History: {reflection_data}
-        Requirements: List data sources used from history in the format:
-        - [1]: [Brief description of content]
-        - Ensure accuracy and relevance to the analysis.
-        Output: Maximum 50 words.
-        """
-    refined_references_message = llm.invoke(prompt_references)
-    refined_references_content = refined_references_message.content
-
+            ),
+        ]
+    )
+    prompt_input = {
+        "messages": messages,
+        "symbol": symbol,
+        "response": response,
+        "reflection_data": reflection_data,
+        "critique": critique,
+    }
+    
+    structured_llm = llm.with_structured_output(AnswerQuestionRevise)
+    chain = prompt_template | structured_llm
+    analysis_message = chain.invoke(prompt_input)
+    
+    
+    refined_analysis_content = analysis_message.analysis
+    refined_critique_content = analysis_message.critique
+    refined_query_content = analysis_message.query
+    refined_references_content = analysis_message.references
+    
     return {
         **state,
         "response": refined_analysis_content,
@@ -562,21 +409,16 @@ def format_final_output(state: ReflectionState) -> ReflectionState:
     market_context = state["market_context"]
     messages = state["messages"]
 
-    if not final_analysis:
-        output = f"Unable to complete technical analysis (3 months) for {symbol} due to insufficient data."
-        return {**state, "final_output": output, "messages": messages + [AIMessage(content=output)]}
-
-    save_to_vectorstore(final_analysis, symbol, market_context)
-
     output = f"""
         # Technical Analysis for {symbol}
-        **Analysis Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         **Market Context:**  
         {market_context}
 
         ## Detailed Analysis
         {final_analysis}
         """
+    
+    save_to_vectorstore(output, symbol, market_context)
 
     return {**state, "final_output": output, "messages": messages + [AIMessage(content=output)]}
 
@@ -623,7 +465,7 @@ def build_workflow():
 
 def low_level_agent(symbol: str, market_context: Optional[str], max_reflections: int = 2):
     initial_state = {
-        "messages": [HumanMessage(content=f"Technical analysis for {symbol}.")],
+        "messages": [HumanMessage(content=f"Phân tích kỹ thuật {symbol}.")],
         "symbol": symbol,
         "market_context": market_context,
         "response": "",
@@ -645,10 +487,10 @@ graph = build_workflow()
 if __name__ == "__main__":
     symbol_to_analyze = "AAPL"
     market_context = (
-        f"Market context for {symbol_to_analyze}:\n"
-        f"- Overview: General market has been moving sideways for the past few weeks.\n"
+        f"Market Context for {symbol_to_analyze}:\n"
+        f"- Overview: The general market has been moving sideways in the past few weeks.\n"
         f"- Sector: Technology is showing signs of accumulation.\n"
-        f"- News: No significant news recently affecting the price."
+        f"- News: No recent significant news affecting the price."
     )
     max_reflections = 2
 

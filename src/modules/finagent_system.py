@@ -13,7 +13,7 @@ from langgraph.graph.message import add_messages
 
 # Import các module agent
 from modules.low_level.agent import low_level_agent
-from modules.high_level.agent import high_level_reflection_agent
+from modules.high_level.agent import high_level_agent
 from server.schema import AssetData
 
 from modules.market_intelligence.graph import run_market_intelligence_agent
@@ -47,7 +47,7 @@ class MasterState(TypedDict):
 def initialize_state(state: MasterState) -> MasterState:
 
     if state.get("symbol") is None: 
-        raise ValueError("Symbol không được cung cấp trong state.")
+        raise ValueError("Symbol not provide at state.")
 
     if state.get("holding") is None:
         state["holding"] = {
@@ -106,7 +106,11 @@ def technical_analysis_node(state: MasterState) -> MasterState:
     market_data = state["market_data"]
     messages = state["messages"]
 
-    tech_state = low_level_agent(symbol, market_data, max_reflections=1)
+    # tech_state = low_level_agent(symbol, market_data, max_reflections=1)
+
+    tech_state = """ 
+        Based on the technical analysis, AAPL shows mixed signals. The Moving Averages (MA and EMA) indicate an upward trend, while the MACD presents a bearish signal. The RSI is neutral. The price is expected to fluctuate between the Bollinger Bands (228.90 and 263.53). Overall, the short-term outlook is uncertain and requires further confirmation
+    """
 
     return {
         **state,
@@ -119,34 +123,53 @@ def high_level_reflection_node(state: MasterState) -> MasterState:
     technical_analysis = state["technical_analysis"]
     messages = state["messages"]
 
-    sample_trade_history = [
-        {
-            "trade_id": str(uuid4()),
-            "symbol": symbol,
-            "date": "2025-02-15",
-            "action": "Buy",
-            "price": 150.0,
-            "quantity": 100,
-            "reason": "RSI gives oversold signal, positive MACD crossover.",
-            "outcome": "Profit",
-            "profit_loss": 500.0,
-            "analysis": "Correct decision as the price increased after the technical signal."
-        },
-        {
-            "trade_id": str(uuid4()),
-            "symbol": symbol,
-            "date": "2025-03-10",
-            "action": "Sell",
-            "price": 155.0,
-            "quantity": 100,
-            "reason": "Price hit strong resistance at 155, RSI overbought.",
-            "outcome": "Loss",
-            "profit_loss": -200.0,
-            "analysis": "Wrong decision as the price continued to rise after selling."
-        }
-    ]
+    # sample_trade_history = [
+    #     {
+    #         "trade_id": str(uuid4()),
+    #         "symbol": symbol,
+    #         "date": "2025-02-15",
+    #         "action": "Buy",
+    #         "price": 150.0,
+    #         "quantity": 100,
+    #         "reason": "RSI gives oversold signal, positive MACD crossover.",
+    #         "outcome": "Profit",
+    #         "profit_loss": 500.0,
+    #         "analysis": "Correct decision as the price increased after the technical signal."
+    #     },
+    #     {
+    #         "trade_id": str(uuid4()),
+    #         "symbol": symbol,
+    #         "date": "2025-03-10",
+    #         "action": "Sell",
+    #         "price": 155.0,
+    #         "quantity": 100,
+    #         "reason": "Price hit strong resistance at 155, RSI overbought.",
+    #         "outcome": "Loss",
+    #         "profit_loss": -200.0,
+    #         "analysis": "Wrong decision as the price continued to rise after selling."
+    #     }
+    # ]
 
-    reflection_state = high_level_reflection_agent(symbol, market_data, technical_analysis, sample_trade_history, max_reflections=1)
+    # reflection_state = high_level_agent(symbol, market_data, technical_analysis, sample_trade_history, max_reflections=1)
+
+    reflection_state = """
+        # Analysis of AAPL Trade Decision
+
+        Market Context:
+        Market Context for AAPL:
+
+        Overview: The overall market has been moving sideways in recent weeks.
+
+        Sector: The technology sector is showing signs of accumulation.
+
+        News: There has been no major recent news impacting the price.
+
+        Detailed Analysis
+        Based on technical analysis and market context, AAPL shows an upward trend. Positive indicators include a MACD crossover and the 20-day moving average (MA20) crossing above the 50-day moving average (MA50). The RSI is at 65, indicating a neutral to slightly overbought condition, but not a sell signal. Support and resistance levels are at 145 and 155, respectively. Consider using a trailing stop-loss to protect profits while allowing for further gains.
+
+
+
+    """
     
     return {
         **state,
@@ -187,7 +210,7 @@ def risk_management_node(state: MasterState) -> MasterState:
 
 def decision_node(state: MasterState) -> MasterState:
     
-    llm = LLM.get_gemini_llm()
+    llm = LLM.get_gemini_llm(model_index = 1)
 
     chain = llm | DecisionOutputParser()
 

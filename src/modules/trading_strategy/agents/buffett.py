@@ -13,13 +13,10 @@ from langgraph.graph import StateGraph, END
 import json 
 from modules.trading_strategy.prompt.buffett import get_buffett_prompt
 from langchain_google_genai import ChatGoogleGenerativeAI
-
+from modules.utils.llm import LLM
 
 from dotenv import load_dotenv
 
-load_dotenv()
-
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 
 
@@ -255,10 +252,7 @@ def generate_signal(buffett_state: BuffettState) -> BuffettState:
         )
 
 
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash", 
-            api_key = GEMINI_API_KEY
-        )
+        llm = LLM.get_gemini_llm(model_index = 1) 
         
         # Get LLM response and parse it
         chain = llm | TradingSignalParser()

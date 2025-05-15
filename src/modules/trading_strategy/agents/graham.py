@@ -18,7 +18,7 @@ from modules.trading_strategy.tools.api_tools import (
     search_line_items,
 )
 from modules.trading_strategy.prompt.graham import get_graham_prompt
-from langchain_google_genai import ChatGoogleGenerativeAI
+from modules.utils.llm import LLM
 
 # LangGraph imports
 from langgraph.graph import StateGraph, END
@@ -225,10 +225,7 @@ def generate_signal(state: GrahamState) -> Dict:
             signal=signal
         )
         
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash", 
-            api_key=GEMINI_API_KEY
-        )
+        llm = LLM.get_gemini_llm(model_index = 1)
         
         chain = llm | TradingSignalParser()
         graham_output = chain.invoke(prompt)
