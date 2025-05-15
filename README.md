@@ -22,6 +22,6 @@ ZenithTrader/
 ```
 
 
-## Agent Design V1
+## System Design
 
-![image](docs/Screenshot%20from%202025-04-06%2009-58-52.png)
+![image](docs/system_design.png)
