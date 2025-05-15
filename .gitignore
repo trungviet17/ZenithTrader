@@ -178,6 +178,7 @@ cython_debug/
 
 *.db
 *.faiss
+.gradio
 qdrant_data
 
 trader_env
