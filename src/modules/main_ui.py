@@ -5,10 +5,228 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import random
 from datetime import datetime, timedelta
+import yfinance as yf
+import json
+from time import sleep
 
 from modules.finagent_system import MasterState, build_master_workflow
 
-# Generate sample data
+# Add fetch_stock_data function from client.py
+def fetch_stock_data(symbol, period="1mo", interval="1d"): 
+    try: 
+        stock = yf.Ticker(symbol)
+        data = stock.history(period=period, interval=interval)
+        return data 
+    except Exception as e: 
+        print(f"Error fetching data for {symbol}: {e}")
+        return pd.DataFrame()
+
+# Create candlestick chart with real data
+def create_candlestick_chart(symbol="BTC-USD", period="1mo", interval="1d"):
+    df = fetch_stock_data(symbol, period, interval)
+    if (df.empty):
+        # Fallback to generated data if fetch fails
+        df = generate_candlestick_data()
+    
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
+                        row_heights=[0.7, 0.3],
+                        vertical_spacing=0.02)
+    
+    # Candlestick chart
+    fig.add_trace(
+        go.Candlestick(
+            x=df.index if hasattr(df, 'index') else df['Date'],
+            open=df['Open'], 
+            high=df['High'],
+            low=df['Low'], 
+            close=df['Close'],
+            increasing_line_color='#26A69A',
+            decreasing_line_color='#EF5350'
+        ),
+        row=1, col=1
+    )
+    
+    # Volume chart
+    fig.add_trace(
+        go.Bar(
+            x=df.index if hasattr(df, 'index') else df['Date'], 
+            y=df['Volume'],
+            marker_color='rgba(73, 133, 231, 0.5)'
+        ),
+        row=2, col=1
+    )
+    
+    # Update layout
+    fig.update_layout(
+        title={
+            'text': f'{symbol} Market Analysis',
+            'x': 0.01,
+            'xanchor': 'left'
+        },
+        xaxis_title='',
+        yaxis_title='',
+        template='plotly_dark',
+        plot_bgcolor='rgba(15, 21, 42, 1)',
+        paper_bgcolor='rgba(15, 21, 42, 1)',
+        font=dict(color='white'),
+        xaxis_rangeslider_visible=False,
+        height=500,
+        margin=dict(l=40, r=20, t=50, b=20),
+    )
+    
+    fig.update_xaxes(gridcolor='rgba(128, 128, 128, 0.1)', zerolinecolor='rgba(128, 128, 128, 0.1)')
+    fig.update_yaxes(gridcolor='rgba(128, 128, 128, 0.1)', zerolinecolor='rgba(128, 128, 128, 0.1)')
+    
+    return fig
+
+# Create portfolio chart with real data
+def create_portfolio_chart():
+    # Mock portfolio data - in a real app this would come from a database
+    portfolio = {
+        'AAPL': 10,
+        'GOOGL': 5,
+        'MSFT': 8,
+        'AMZN': 3,
+        'TSLA': 15
+    }
+    
+    # Get current prices
+    prices = {}
+    total_value = 0
+    for symbol, quantity in portfolio.items():
+        try:
+            data = fetch_stock_data(symbol, period="1d", interval="1d")
+            if not data.empty:
+                latest_price = data['Close'].iloc[-1]
+                prices[symbol] = latest_price
+                total_value += latest_price * quantity
+        except Exception:
+            prices[symbol] = 0
+    
+    # Create pie chart for portfolio composition
+    labels = list(portfolio.keys())
+    values = [portfolio[symbol] * prices.get(symbol, 0) for symbol in labels]
+    
+    fig = go.Figure(data=[go.Pie(labels=labels, values=values, hole=.3)])
+    fig.update_layout(
+        title={
+            'text': 'Portfolio Composition',
+            'x': 0.01,
+            'xanchor': 'left'
+        },
+        template='plotly_dark',
+        plot_bgcolor='rgba(15, 21, 42, 1)',
+        paper_bgcolor='rgba(15, 21, 42, 1)',
+        font=dict(color='white'),
+        height=300,
+        margin=dict(l=40, r=20, t=50, b=20),
+    )
+    
+    return fig
+
+# Create profit chart with real data for SPY (S&P 500 ETF) as benchmark
+def create_profit_chart():
+    try:
+        # Get S&P 500 data for last 4 months
+        data = fetch_stock_data('SPY', period="4mo", interval="1mo")
+        months = []
+        values = []
+        
+        if not data.empty:
+            for i, (date, row) in enumerate(data.iterrows()):
+                month = date.strftime('%b')
+                months.append(month)
+                # Calculate month-over-month change
+                price_change = row['Close'] - row['Open']
+                values.append(price_change)
+        else:
+            months = ['Jan', 'Feb', 'Mar', 'Apr']
+            values = [random.uniform(100, 300) for _ in range(3)] + [random.uniform(500, 900)]
+    except:
+        months = ['Jan', 'Feb', 'Mar', 'Apr']
+        values = [random.uniform(100, 300) for _ in range(3)] + [random.uniform(500, 900)]
+    
+    fig = go.Figure()
+    fig.add_trace(
+        go.Bar(
+            x=months,
+            y=values,
+            marker_color=['rgba(73, 133, 231, 0.7)' if v >= 0 else 'rgba(231, 73, 73, 0.7)' for v in values]
+        )
+    )
+    
+    fig.update_layout(
+        title={
+            'text': 'Monthly Market Change',
+            'x': 0.01,
+            'xanchor': 'left'
+        },
+        xaxis_title='',
+        yaxis_title='',
+        template='plotly_dark',
+        plot_bgcolor='rgba(15, 21, 42, 1)',
+        paper_bgcolor='rgba(15, 21, 42, 1)',
+        font=dict(color='white'),
+        height=250,
+        margin=dict(l=40, r=20, t=50, b=20),
+        bargap=0.4
+    )
+    
+    fig.update_xaxes(gridcolor='rgba(128, 128, 128, 0.1)', zerolinecolor='rgba(128, 128, 128, 0.1)')
+    fig.update_yaxes(gridcolor='rgba(128, 128, 128, 0.1)', zerolinecolor='rgba(128, 128, 128, 0.1)')
+    
+    return fig
+
+# Create performance chart with real data
+def create_performance_chart(symbol='BTC-USD'):
+    try:
+        df = fetch_stock_data(symbol, period="1mo", interval="1d")
+        if df.empty:
+            raise ValueError("No data fetched")
+            
+        x_data = df.index
+        y_data = df['Close']
+        
+    except Exception:
+        # Fallback to generated data
+        df = generate_price_data()
+        x_data = df['Date']
+        y_data = df['Price']
+    
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=x_data,
+            y=y_data,
+            mode='lines',
+            line=dict(color='#ffc400', width=2),
+            fill='tozeroy',
+            fillcolor='rgba(255, 196, 0, 0.1)'
+        )
+    )
+    
+    fig.update_layout(
+        title={
+            'text': f'{symbol} Performance Trend',
+            'x': 0.01,
+            'xanchor': 'left'
+        },
+        xaxis_title='',
+        yaxis_title='',
+        template='plotly_dark',
+        plot_bgcolor='rgba(15, 21, 42, 1)',
+        paper_bgcolor='rgba(15, 21, 42, 1)',
+        font=dict(color='white'),
+        height=150,
+        margin=dict(l=40, r=20, t=50, b=20),
+    )
+    
+    fig.update_xaxes(visible=False)
+    fig.update_yaxes(visible=False)
+    
+    return fig
+
+# Keep the generate_* functions as fallbacks
 def generate_price_data(days=30, volatility=0.02):
     dates = [datetime.now() - timedelta(days=i) for i in range(days)]
     dates.reverse()
@@ -30,7 +248,6 @@ def generate_price_data(days=30, volatility=0.02):
     })
     return df
 
-# Create candlestick data
 def generate_candlestick_data(days=60):
     dates = [datetime.now() - timedelta(days=i) for i in range(days)]
     dates.reverse()
@@ -57,7 +274,6 @@ def generate_candlestick_data(days=60):
     
     return pd.DataFrame(data)
 
-# Generate arbitrage bot data
 def generate_arbitrage_data():
     exchanges = ["Binance", "Coinbase", "Kraken", "Huobi"]
     pairs = ["BTC/USDT", "ETH/USDT", "BNB/USDT", "XRP/USDT"]
@@ -87,7 +303,6 @@ def generate_arbitrage_data():
     
     return pd.DataFrame(data)
 
-# Generate portfolio data
 def generate_portfolio_data():
     coins = ["Bitcoin (BTC)", "Ethereum (ETH)", "Binance Coin (BNB)", "Ripple (XRP)", "Cardano (ADA)"]
     portfolio = []
@@ -110,168 +325,86 @@ def generate_portfolio_data():
     
     return pd.DataFrame(portfolio)
 
-# Create candlestick chart
-def create_candlestick_chart():
-    df = generate_candlestick_data()
-    
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
-                        row_heights=[0.7, 0.3],
-                        vertical_spacing=0.02)
-    
-    # Candlestick chart
-    fig.add_trace(
-        go.Candlestick(
-            x=df['Date'],
-            open=df['Open'], 
-            high=df['High'],
-            low=df['Low'], 
-            close=df['Close'],
-            increasing_line_color='#26A69A',
-            decreasing_line_color='#EF5350'
-        ),
-        row=1, col=1
-    )
-    
-    # Volume chart
-    fig.add_trace(
-        go.Bar(
-            x=df['Date'], 
-            y=df['Volume'],
-            marker_color='rgba(73, 133, 231, 0.5)'
-        ),
-        row=2, col=1
-    )
-    
-    # Update layout
-    fig.update_layout(
-        title='',
-        xaxis_title='',
-        yaxis_title='',
-        template='plotly_dark',
-        plot_bgcolor='rgba(15, 21, 42, 1)',
-        paper_bgcolor='rgba(15, 21, 42, 1)',
-        font=dict(color='white'),
-        xaxis_rangeslider_visible=False,
-        height=500,
-        margin=dict(l=20, r=20, t=20, b=20),
-    )
-    
-    fig.update_xaxes(gridcolor='rgba(128, 128, 128, 0.1)', zerolinecolor='rgba(128, 128, 128, 0.1)')
-    fig.update_yaxes(gridcolor='rgba(128, 128, 128, 0.1)', zerolinecolor='rgba(128, 128, 128, 0.1)')
-    
-    return fig
-
-# Create profit chart
-def create_profit_chart():
-    months = ['Jan', 'Feb', 'Mar', 'Apr']
-    values = [random.uniform(100, 300) for _ in range(3)] + [random.uniform(500, 900)]
-    
-    fig = go.Figure()
-    fig.add_trace(
-        go.Bar(
-            x=months,
-            y=values,
-            marker_color='rgba(73, 133, 231, 0.7)'
-        )
-    )
-    
-    fig.update_layout(
-        title='',
-        xaxis_title='',
-        yaxis_title='',
-        template='plotly_dark',
-        plot_bgcolor='rgba(15, 21, 42, 1)',
-        paper_bgcolor='rgba(15, 21, 42, 1)',
-        font=dict(color='white'),
-        height=250,
-        margin=dict(l=20, r=20, t=20, b=20),
-        bargap=0.4
-    )
-    
-    fig.update_xaxes(gridcolor='rgba(128, 128, 128, 0.1)', zerolinecolor='rgba(128, 128, 128, 0.1)')
-    fig.update_yaxes(gridcolor='rgba(128, 128, 128, 0.1)', zerolinecolor='rgba(128, 128, 128, 0.1)')
-    
-    return fig
-
-# Create performance chart
-def create_performance_chart():
-    df = generate_price_data()
-    
-    fig = go.Figure()
-    fig.add_trace(
-        go.Scatter(
-            x=df['Date'],
-            y=df['Price'],
-            mode='lines',
-            line=dict(color='#ffc400', width=2),
-            fill='tozeroy',
-            fillcolor='rgba(255, 196, 0, 0.1)'
-        )
-    )
-    
-    fig.update_layout(
-        title='',
-        xaxis_title='',
-        yaxis_title='',
-        template='plotly_dark',
-        plot_bgcolor='rgba(15, 21, 42, 1)',
-        paper_bgcolor='rgba(15, 21, 42, 1)',
-        font=dict(color='white'),
-        height=150,
-        margin=dict(l=20, r=20, t=20, b=20),
-    )
-    
-    fig.update_xaxes(visible=False)
-    fig.update_yaxes(visible=False)
-    
-    return fig
-
-# Define the agent function as provided
+# Updated run_agent function to match client.py format
 def run_agent(symbol, period, interval): 
     try:
         # Create initial state for the agent
         state = MasterState(symbol=symbol)
-
+        
         # Show "Running analysis..." message while processing
-        yield f"Running analysis for {symbol}... (This may take a few minutes)"
-
+        yield f"Running analysis for {symbol}... (This may take a few minutes)", "", "", "", "", ""
+        
         graph = build_master_workflow()
 
         # Run the agent workflow
         result = graph.invoke(state)
-
-        # Format the output to display relevant information
-        output = f"## Trading Analysis for {symbol}\n\n"
-
-        if result.get("market_data"):
-            output += "### Market Intelligence\n"
-            output += result["market_data"][:500] + "...\n\n"
-
-        if result.get("technical_analysis"):
-            output += "### Technical Analysis\n"
-            output += result["technical_analysis"][:500] + "...\n\n"
-
-        if result.get("trading_strategy"):
-            output += "### Trading Strategy\n"
-            output += result["trading_strategy"][:500] + "...\n\n"
-
+        
+        # Structure the output for different tabs
+        market_data = result.get("market_data", "No market data available")
+        tech_analysis = result.get("technical_analysis", "No technical analysis available")
+        trading_strategy = result.get("trading_strategy", "No trading strategy available")
+        risk_assessment = result.get("risk_assessment", "No risk assessment available")
+        
+        # Format decision data
+        decision_text = ""
         if result.get("decision"):
             decision = result["decision"]
-            output += f"### Decision: {decision.action}\n"
-            output += f"Symbol: {decision.symbol}\n"
-            output += f"Quantity: {decision.quantity}\n"
-            output += f"Price: {decision.price}\n"
-            output += f"Reason: {decision.reasoning}\n\n"
-
-        if result.get("risk_assessment"):
-            output += "### Risk Assessment\n"
-            output += result["risk_assessment"][:500] + "...\n\n"
-
-        yield output
+            decision_text = f"""
+            <div class="decision-box">
+                <h3>Trading Decision: <span class="action-{decision.action.lower()}">{decision.action}</span></h3>
+                <p><strong>Symbol:</strong> {decision.symbol}</p>
+                <p><strong>Quantity:</strong> {decision.quantity}</p>
+                <p><strong>Price:</strong> ${decision.price}</p>
+                <p><strong>Reasoning:</strong> {decision.reasoning}</p>
+            </div>
+            """
+        
+        # Return individual values instead of a dictionary
+        status_text = f"Analysis completed for {symbol}"
+        
+        yield status_text, market_data, tech_analysis, trading_strategy, decision_text, risk_assessment
 
     except Exception as e:
         print(f"Error running agent for {symbol}: {e}")
-        yield f"Error running analysis for {symbol}: {e}"
+        error_msg = f"Error running analysis for {symbol}: {e}"
+        yield error_msg, "", "", "", "", ""
+
+# Add run_agent_from_cache function from client.py
+def run_agent_from_cache(symbol, period, interval):
+    try: 
+        data = json.load(open(f"cache/result.json"))
+
+        yield f"\n\n  Running analysis for {symbol}... (This may take a few minutes)", "", "", "", "", ""
+        sleep(10) 
+
+        market_data = data.get("market_data", "No market data available")
+        tech_analysis = data.get("technical_analysis", "No technical analysis available")
+        trading_strategy = data.get("trading_strategy", "No trading strategy available")
+        risk_assessment = data.get("risk_assessment", "No risk assessment available")
+        decision_text = ""
+        if data.get("decision"):
+            decision = data["decision"]
+            decision_text = f"""
+            <div class="decision-box" style="background-color: black; color: white;">
+                <h3>Trading Decision: <span class="action-{decision['action'].lower()}">{decision['action']}</span></h3>
+                <p><strong>Symbol:</strong> {decision['symbol']}</p>
+                <p><strong>Quantity:</strong> {decision['quantity']}</p>
+                <p><strong>Price:</strong> ${decision['price']}</p>
+                <p><strong>Reasoning:</strong> {decision['reasoning']}</p>
+            </div>
+            """
+
+        status_text = f"Analysis completed for {symbol}"
+        
+        yield status_text, market_data, tech_analysis, trading_strategy, decision_text, risk_assessment
+
+    except FileNotFoundError:
+        print(f"Cache file not found for {symbol}. Please run the analysis first.")
+        yield "Cache file not found", "", "", "", "", ""
+
+    except Exception as e: 
+        print(f"Error loading cached data for {symbol}: {e}")
+        yield f"Error loading cached data: {e}", "", "", "", "", ""
 
 # Define CSS
 css = """
@@ -287,11 +420,14 @@ body {
 
 h1, h2, h3, h4 {
     color: white !important;
+    padding-left: 15px !important;
+    margin-left: 5px !important;
 }
 
 .tabs {
     border-radius: 10px;
     overflow: hidden;
+    padding-left: 15px;
 }
 
 .card {
@@ -300,6 +436,24 @@ h1, h2, h3, h4 {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
     padding: 20px;
     margin-bottom: 20px;
+}
+
+.card h3, .card h4 {
+    padding-left: 15px !important;
+    margin-bottom: 20px !important;
+    position: relative;
+}
+
+.card h3::before, .card h4::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 5px;
+    height: 20px;
+    background: linear-gradient(45deg, #4985e7, #38bdf8);
+    border-radius: 3px;
 }
 
 .balance-card {
@@ -328,6 +482,7 @@ h1, h2, h3, h4 {
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     margin-right: 20px;
+    margin-left: 10px;
 }
 
 .menu-item {
@@ -397,11 +552,13 @@ td {
     font-size: 28px;
     font-weight: bold;
     margin-bottom: 5px;
+    padding-left: 10px;
 }
 
 .stats-label {
     font-size: 14px;
     color: #888;
+    padding-left: 10px;
 }
 
 .bot-card {
@@ -420,6 +577,7 @@ td {
     border-radius: 5px !important;
     cursor: pointer !important;
     transition: all 0.3s ease !important;
+    margin-left: 15px !important;
 }
 
 .btn-primary:hover {
@@ -431,6 +589,7 @@ td {
     background: transparent !important;
     border: 1px solid #4985e7 !important;
     color: #4985e7 !important;
+    margin-left: 15px !important;
 }
 
 .btn-outline:hover {
@@ -464,24 +623,31 @@ td {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 15px;
+    padding-left: 15px;
+}
+
+/* Ensure markdown content has proper padding */
+.prose {
+    padding-left: 15px !important;
+}
+
+/* Add padding to dataframe headers */
+.svelte-1gfkn6j {
+    padding-left: 15px !important;
 }
 """
 
 # Build the dashboard
-with gr.Blocks(css=css) as app:
+with gr.Blocks(title = "Zenith Trader", css=css) as app:
     # Header
     with gr.Row():
         with gr.Column():
             gr.HTML("""
             <div class="header">
                 <div class="logo">
-                    <span style="font-size: 24px;">🤖</span> AIBots
+                    <span style="font-size: 24px;">🤖</span> Zenith Trader 
                 </div>
-                <div class="menu-item active">Dashboard</div>
-                <div class="menu-item">Arbitrage AI Bots</div>
-                <div class="menu-item">My Exchanges</div>
-                <div class="menu-item">Settings</div>
-                <div class="menu-item">Support</div>
+               
             </div>
             """)
     
@@ -605,7 +771,17 @@ with gr.Blocks(css=css) as app:
                 with gr.Column(scale=2):
                     with gr.Group(elem_classes=["card"]):
                         gr.Markdown("### AI Strategy")
-                        candlestick = gr.Plot(create_candlestick_chart)
+                        symbol_select = gr.Dropdown(
+                            choices=["BTC-USD", "ETH-USD", "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA"],
+                            value="BTC-USD",
+                            label="Select Symbol"
+                        )
+                        candlestick = gr.Plot(lambda: create_candlestick_chart("BTC-USD"))
+                        symbol_select.change(
+                            fn=create_candlestick_chart,
+                            inputs=symbol_select,
+                            outputs=candlestick
+                        )
                 
                 with gr.Column(scale=1):
                     with gr.Group(elem_classes=["card"]):
@@ -641,33 +817,67 @@ with gr.Blocks(css=css) as app:
                         with gr.Row():
                             with gr.Column(scale=1):
                                 symbol_input = gr.Dropdown(
-                                    choices=["AAPL", "ETH/USDT", "BNB/USDT", "XRP/USDT", "ADA/USDT"],
+                                    choices=["AAPL", "GOOGL", "MSFT", "AMZN", "TSLA", "BTC-USD", "ETH-USD"],
                                     label="Symbol",
                                     value="AAPL"
                                 )
                             with gr.Column(scale=1):
                                 period_input = gr.Dropdown(
-                                    choices=["1d", "3d", "7d", "14d", "30d"],
+                                    choices=["1d", "5d", "1mo", "3mo", "6mo", "1y"],
                                     label="Period",
-                                    value="7d"
+                                    value="3mo"
                                 )
                             with gr.Column(scale=1):
                                 interval_input = gr.Dropdown(
-                                    choices=["1m", "5m", "15m", "30m", "1h", "4h", "1d"],
+                                    choices=["1m", "5m", "15m", "30m", "1h", "1d"],
                                     label="Interval",
                                     value="1h"
                                 )
                         
                         with gr.Row():
-                            run_button = gr.Button("Get AI Suggestions", elem_classes=["btn-primary"])
-                            
-                        with gr.Row():
-                            agent_output = gr.Markdown("AI suggestions will appear here...")
+                            run_cache_button = gr.Button("Get AI Suggestions", elem_classes=["btn-outline"])
                         
-                        run_button.click(
-                            fn=run_agent,
+                        # Agent output area with tabs
+                        with gr.Accordion("Trading Analysis Results", open=False) as analysis_accordion:
+                            status_text = gr.Markdown("Select a symbol and run analysis")
+                            
+                            with gr.Tabs() as analysis_tabs:
+                                with gr.TabItem("Decision"):
+                                    decision_html = gr.HTML("")
+                                with gr.TabItem("Market Intelligence"):
+                                    market_data_md = gr.Markdown("")
+                                with gr.TabItem("Technical Analysis"):
+                                    tech_analysis_md = gr.Markdown("")
+                                with gr.TabItem("Trading Strategy"):
+                                    strategy_md = gr.Markdown("")
+                                with gr.TabItem("Risk Assessment"):
+                                    risk_md = gr.Markdown("")
+                        
+                        # run_button.click(
+                        #     fn=run_agent,
+                        #     inputs=[symbol_input, period_input, interval_input],
+                        #     outputs=[
+                        #         status_text,
+                        #         market_data_md,
+                        #         tech_analysis_md,
+                        #         strategy_md,
+                        #         decision_html,
+                        #         risk_md
+                        #     ]
+                        # )
+                        
+                        # Add the cached analysis button functionality
+                        run_cache_button.click(
+                            fn=run_agent_from_cache,
                             inputs=[symbol_input, period_input, interval_input],
-                            outputs=agent_output
+                            outputs=[
+                                status_text,
+                                market_data_md,
+                                tech_analysis_md,
+                                strategy_md,
+                                decision_html,
+                                risk_md
+                            ]
                         )
             
             with gr.Row():
@@ -698,47 +908,6 @@ with gr.Blocks(css=css) as app:
                             elem_classes=["arbitrage-table"]
                         )
             
-            with gr.Row():
-                with gr.Column(scale=1):
-                    pass
-                
-                with gr.Column(scale=1):
-                    with gr.Group(elem_classes=["card"]):
-                        gr.Markdown("### Create DCA Bot")
-                        
-                        with gr.Row():
-                            with gr.Column():
-                                gr.Dropdown(
-                                    choices=["BTC/USDT", "ETH/USDT", "BNB/USDT", "XRP/USDT"],
-                                    label="Select Pair",
-                                    value="BTC/USDT"
-                                )
-                                
-                                gr.Dropdown(
-                                    choices=["Binance", "Coinbase", "Kraken", "Huobi"],
-                                    label="Select Exchange",
-                                    value="Binance"
-                                )
-                        
-                        with gr.Row():
-                            with gr.Column():
-                                gr.Textbox(
-                                    label="Initial Investment",
-                                    value="1000",
-                                    placeholder="Enter initial investment..."
-                                )
-                                
-                                gr.Slider(
-                                    minimum=1, 
-                                    maximum=10, 
-                                    value=5,
-                                    label="Risk adjustment"
-                                )
-                        
-                        with gr.Row():
-                            with gr.Column():
-                                gr.Button("PROCESS", elem_classes=["btn-primary"])
-                                gr.Button("CONTINUE", elem_classes=["btn-outline"])
 
 # Launch the app
 app.launch()
